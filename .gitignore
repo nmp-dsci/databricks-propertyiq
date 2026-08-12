@@ -1,0 +1,35 @@
+# Databricks
+.databricks/
+.databricks-login.json
+*.lvdash.json.bak
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.token
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# Data — generate it, don't commit it
+data/
+*.parquet
+*.csv
+!tests/fixtures/*.csv
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+!.vscode/settings.json

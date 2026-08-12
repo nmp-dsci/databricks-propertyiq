@@ -1,0 +1,15 @@
+resources:
+  dashboards:
+    retail_overview:
+      display_name: Retail Overview
+      file_path: ../../dashboards/retail_overview.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      # Dashboards are edited in the Databricks UI far more comfortably than in
+      # JSON. Round-trip workflow:
+      #   1. `make deploy`            -> pushes this JSON up
+      #   2. edit in the UI
+      #   3. `make pull-dashboard`    -> writes the UI version back to this file
+      #   4. commit
+      # Setting this to false means a UI edit is NOT silently clobbered on the
+      # next deploy — the CLI errors instead, reminding you to pull first.
+      embed_credentials: false

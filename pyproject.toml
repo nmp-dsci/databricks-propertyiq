@@ -1,0 +1,32 @@
+[project]
+name = "databricks-spike"
+version = "0.1.0"
+description = "Local-first Databricks development: notebooks, SQL and dashboards authored here, deployed to a Free Edition workspace via Asset Bundles."
+requires-python = ">=3.11,<3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  # Local Spark for unit-testing the transforms without a workspace.
+  # Pinned to the Databricks Runtime 16.x Spark line so local behaviour matches
+  # what serverless actually runs.
+  "pyspark==3.5.3",
+  "pytest>=8.3",
+  "ruff>=0.14",
+  # Used by scripts/run_sql.py to execute SQL on the serverless warehouse.
+  "databricks-sdk>=0.68",
+]
+
+[tool.ruff]
+line-length = 100
+# Databricks source-format notebooks are valid Python but use `dbutils`,
+# `display` and `spark` as injected globals — lint them with a lighter touch.
+extend-exclude = ["src/notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = ["ignore::DeprecationWarning"]

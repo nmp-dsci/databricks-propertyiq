@@ -1,0 +1,42 @@
+bundle:
+  name: databricks-spike
+
+variables:
+  catalog:
+    description: Unity Catalog catalog. Free Edition ships with `workspace`.
+    default: workspace
+  schema:
+    description: Schema holding bronze/silver/gold tables.
+    default: retail_spike
+  warehouse_id:
+    description: >-
+      Serverless SQL warehouse id, used by dashboards and SQL tasks.
+      Find it under SQL Warehouses > (your warehouse) > Connection details.
+    default: ""
+  rows:
+    description: Number of synthetic order rows to generate.
+    default: "500000"
+
+include:
+  - resources/jobs/*.yml
+  - resources/dashboards/*.yml
+
+targets:
+  # Default target. Deploys under /Workspace/Users/<you>/.bundle/... so nothing
+  # collides with hand-made notebooks. Jobs are paused; run them by hand.
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: ${workspace.host}
+
+  # Same workspace, but deployed as a "real" release: unprefixed names,
+  # schedules live. Useful for the Interview 4 demo build.
+  demo:
+    mode: production
+    workspace:
+      host: ${workspace.host}
+      root_path: /Workspace/Shared/.bundle/${bundle.name}
+    permissions:
+      - level: CAN_MANAGE
+        user_name: ${workspace.current_user.userName}
