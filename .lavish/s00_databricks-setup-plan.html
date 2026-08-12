@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Databricks Control Plan: local repo to live workspace</title>
+<script>
+  (function(){
+    var t; try{t=localStorage.getItem('s00-theme')}catch(e){}
+    var mq=window.matchMedia('(prefers-color-scheme: dark)');
+    if(t!=='light'&&t!=='dark'){t=mq.matches?'dark':'light'}
+    document.documentElement.setAttribute('data-theme',t);
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#F4F6F3; --panel:#FFFFFF; --panel-2:#FAFBF9; --ink:#14181C; --ink-soft:#3E4A44;
+  --muted:#5A655D; --faint:#77837A; --line:#DDE4DC; --line-2:#C9D2C9;
+  --signal:#17876B; --signal-soft:#E4F1EC; --amber:#B26A12; --amber-soft:#F6ECDC;
+  --fail:#A8402F; --fail-soft:#F4E2DE; --brick:#C2410C; --brick-soft:#F7E7DC;
+  --chip-bg:#E4F1EC; --chip-ink:#11674F; --hover:#FAFBF9;
+  --nav-bg:rgba(244,246,243,.85); --grid-line:rgba(16,22,19,.028);
+  --hero-glow:rgba(23,135,107,.07); --pre-bg:#14181C; --pre-ink:#E8ECE9;
+  --shadow:0 1px 2px rgba(16,22,19,.04),0 10px 26px -14px rgba(16,22,19,.16);
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --w:1120px;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#101511; --panel:#171E19; --panel-2:#1C2420; --ink:#E8EDE9; --ink-soft:#C3CCC5;
+  --muted:#96A29A; --faint:#71807A; --line:#242E27; --line-2:#33413A;
+  --signal:#43C29A; --signal-soft:#173428; --amber:#D19243; --amber-soft:#2A2113;
+  --fail:#E0715C; --fail-soft:#2E1A16; --brick:#E8935B; --brick-soft:#2C1D12;
+  --chip-bg:#173428; --chip-ink:#7FDDBB; --hover:#1C2420;
+  --nav-bg:rgba(16,21,17,.85); --grid-line:rgba(232,237,233,.035);
+  --hero-glow:rgba(67,194,154,.09); --pre-bg:#0B0F0C; --pre-ink:#DEE5E0;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 10px 26px -14px rgba(0,0,0,.55);
+}
+*,*::before,*::after{box-sizing:border-box;min-width:0}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.62;letter-spacing:-.005em;
+  background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:34px 34px;transition:background-color .2s,color .2s}
+a{color:var(--signal);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:3px}
+h1,h2,h3,h4{font-weight:600;letter-spacing:-.02em;line-height:1.2;margin:0}
+:where(p,h1,h2,h3,h4,li,td,th,summary,label,button){overflow-wrap:anywhere}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 12px}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:50;background:var(--nav-bg);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav-inner{max-width:var(--w);margin:0 auto;padding:11px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px;color:var(--ink)}
+.wordmark{font-family:var(--mono);font-weight:600;font-size:15px;letter-spacing:-.02em}
+.wordmark .cursor{display:inline-block;width:.55em;height:1.02em;background:var(--signal);vertical-align:-.16em;margin:0 .12em;animation:np-blink 1.15s steps(1) infinite}
+@keyframes np-blink{50%{opacity:0}}
+@media(prefers-reduced-motion:reduce){.wordmark .cursor{animation:none !important}}
+.brand-role{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.nav-links{display:flex;gap:13px;align-items:center;flex-wrap:wrap}
+.nav-links a{color:var(--ink-soft);font-size:13px;font-weight:500}
+.nav-links a:hover{color:var(--signal);text-decoration:none}
+.theme-toggle{font-size:14px;line-height:1;background:transparent;cursor:pointer;border:1px solid var(--line-2);border-radius:999px;width:31px;height:31px;color:var(--ink-soft);display:inline-flex;align-items:center;justify-content:center;padding:0}
+.theme-toggle:hover{border-color:var(--signal);color:var(--signal)}
+
+/* hero */
+.hero{border-bottom:1px solid var(--line);background:radial-gradient(680px 320px at 85% -40%,var(--hero-glow),transparent)}
+.hero-inner{max-width:var(--w);margin:0 auto;padding:54px 22px 40px}
+.hero h1{font-size:clamp(28px,4.4vw,46px);line-height:1.1;letter-spacing:-.028em;max-width:24ch;padding-bottom:.06em}
+.hero h1 .accent{color:var(--signal)}
+.hero-sub{color:var(--muted);font-size:clamp(15px,1.8vw,17.5px);max-width:80ch;margin:16px 0 0}
+.metrics{display:grid;gap:12px;margin-top:30px;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))}
+.met{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 15px;box-shadow:var(--shadow)}
+.met-n{display:block;font-family:var(--mono);font-weight:600;font-size:18px;line-height:1.3;color:var(--signal);font-variant-numeric:tabular-nums}
+.met-l{display:block;font-size:11.5px;color:var(--faint);margin-top:2px}
+
+/* layout */
+.wrap{max-width:var(--w);margin:0 auto;padding:0 22px 96px}
+section{margin-top:60px;scroll-margin-top:66px}
+section>h2{font-size:clamp(21px,2.8vw,28px)}
+section>h2 .snum{font-family:var(--mono);color:var(--signal);font-size:.78em;margin-right:9px}
+.sec-sub{color:var(--muted);font-size:14.5px;max-width:88ch;margin:10px 0 0}
+h3.blk{font-size:17.5px;margin:30px 0 12px;display:flex;align-items:center;gap:9px}
+h3.blk::before{content:"";width:7px;height:7px;border-radius:2px;background:var(--signal);flex:none}
+
+/* cards */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow)}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr))}
+.card h4{font-size:15px;margin-bottom:7px;letter-spacing:-.01em}
+.card p{margin:6px 0;font-size:14px;color:var(--ink-soft)}
+.card .one{font-size:13px;color:var(--muted);font-style:italic;border-left:2px solid var(--line-2);padding-left:10px;margin-top:9px}
+.pill{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:var(--chip-bg);color:var(--chip-ink);white-space:nowrap}
+.pill.amber{background:var(--amber-soft);color:var(--amber)}
+.pill.fail{background:var(--fail-soft);color:var(--fail)}
+.pill.brick{background:var(--brick-soft);color:var(--brick)}
+.pill.grey{background:var(--panel-2);color:var(--faint);border:1px solid var(--line)}
+.tag-row{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}
+
+/* option cards */
+.opt-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+.opt-card.win{border-color:var(--signal);border-width:1.5px}
+.opt-head{padding:15px 18px 12px;border-bottom:1px solid var(--line);background:var(--panel-2)}
+.opt-card.win .opt-head{background:var(--signal-soft)}
+.opt-head h4{font-size:15.5px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.opt-head .verdict{font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);display:block;margin-top:5px}
+.opt-card.win .opt-head .verdict{color:var(--signal)}
+.opt-body{padding:14px 18px 16px;flex:1}
+.opt-body .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);margin:12px 0 5px;display:block}
+.opt-body .lbl:first-child{margin-top:0}
+.opt-body ul{margin:0;padding-left:18px}
+.opt-body li{font-size:13px;color:var(--ink-soft);margin:4px 0}
+.opt-body li.cost{color:var(--muted)}
+
+/* tables */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;background:var(--panel)}
+thead th{background:var(--panel-2);text-align:left;font-weight:600;color:var(--ink);padding:11px 13px;border-bottom:1px solid var(--line-2);font-size:12.5px;vertical-align:bottom}
+td{padding:11px 13px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-soft)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--hover)}
+td.step{font-weight:600;color:var(--ink)}
+td strong{color:var(--ink);font-weight:600}
+.mono{font-family:var(--mono);font-size:12.5px}
+.nw{white-space:nowrap}
+
+/* callouts */
+.callout{border-radius:12px;padding:16px 18px;border:1px solid var(--line);background:var(--panel);margin-top:14px}
+.callout.star{border-color:var(--signal);background:var(--signal-soft)}
+.callout.warn{border-color:var(--amber);background:var(--amber-soft)}
+.callout.red{border-color:var(--fail);background:var(--fail-soft)}
+.callout h4{font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.callout p,.callout li{font-size:13.5px;color:var(--ink-soft)}
+.callout ul{margin:6px 0 0;padding-left:20px}
+.callout li{margin:4px 0}
+
+/* code */
+pre{background:var(--pre-bg);color:var(--pre-ink);border-radius:10px;padding:13px 15px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.72;margin:10px 0;border:1px solid var(--line)}
+pre .c{color:#7E9C8F}
+pre .k{color:#7FDDBB}
+code:not(pre code){font-family:var(--mono);font-size:.88em;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--ink-soft)}
+
+/* lists */
+.list-clean{list-style:none;padding:0;margin:8px 0 0}
+.list-clean li{position:relative;padding-left:22px;margin:7px 0;font-size:13.5px;color:var(--ink-soft)}
+.list-clean li::before{content:"";position:absolute;left:4px;top:9px;width:6px;height:6px;border-radius:50%;background:var(--signal)}
+.list-clean.red li::before{background:var(--fail)}
+.list-clean.amber li::before{background:var(--amber)}
+
+/* diagram */
+.diagram-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px 8px;box-shadow:var(--shadow);overflow-x:auto;margin-top:12px}
+.diagram-card .mermaid{min-width:300px;display:flex;justify-content:center;font-family:var(--sans);margin-top:6px}
+.diagram-card .mermaid svg{max-width:100%;height:auto}
+.dia-cap{font-size:12.5px;color:var(--faint);text-align:center;margin:2px 0 8px}
+
+/* timeline */
+.tl{position:relative;margin-top:14px;padding-left:6px}
+.tl-item{position:relative;padding:0 0 6px 30px;border-left:2px solid var(--line-2);margin-left:9px}
+.tl-item:last-child{border-left-color:transparent}
+.tl-dot{position:absolute;left:-11px;top:2px;width:20px;height:20px;border-radius:50%;background:var(--panel);border:2px solid var(--signal);color:var(--signal);font-family:var(--mono);font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.tl-card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-bottom:14px;box-shadow:var(--shadow)}
+.tl-card h4{font-size:14.5px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.tl-meta{font-family:var(--mono);font-size:11px;color:var(--faint);margin:5px 0 7px}
+.tl-card p{font-size:13.5px;color:var(--ink-soft);margin:6px 0}
+.tl-card .tip{font-size:12.5px;color:var(--ink-soft);background:var(--panel-2);border-radius:7px;padding:9px 11px;margin-top:9px;border:1px solid var(--line)}
+.tl-card .tip b{color:var(--signal)}
+
+/* checklist */
+.chk{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;margin-top:10px}
+.chk-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px 16px;border-bottom:1px solid var(--line)}
+.chk-row:last-child{border-bottom:none}
+.chk-row:hover{background:var(--hover)}
+.chk-row input[type=checkbox]{margin-top:4px;accent-color:var(--signal);width:15px;height:15px}
+.chk-main{font-size:13.5px;color:var(--ink);font-weight:500}
+.chk-sub{font-size:12.5px;color:var(--muted);margin-top:3px;font-weight:400}
+.chk-sub code{font-size:11.5px}
+.chk-when{justify-self:end}
+
+/* decision form */
+.dform{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow);margin-top:14px}
+.dform legend,.dform .q-stem{font-size:15px;font-weight:600;color:var(--ink);margin-bottom:4px;padding:0}
+.dform .q-help{font-size:13px;color:var(--muted);margin:0 0 12px}
+.dform fieldset{border:none;padding:0;margin:0}
+.dopt{display:flex;gap:11px;align-items:flex-start;border:1px solid var(--line);border-radius:9px;padding:11px 13px;cursor:pointer;margin-bottom:8px;transition:border-color .12s,background .12s}
+.dopt:hover{border-color:var(--line-2);background:var(--hover)}
+.dopt:has(input:checked){border-color:var(--signal);background:var(--signal-soft)}
+.dopt input{margin-top:4px;flex:none;accent-color:var(--signal)}
+.dopt .dtxt b{display:block;font-size:13.5px;color:var(--ink);font-weight:600}
+.dopt .dtxt span{font-size:12.5px;color:var(--muted)}
+.btn{font-family:var(--sans);font-size:13px;font-weight:600;border:1px solid var(--signal);background:var(--signal);color:#fff;border-radius:8px;padding:8px 16px;cursor:pointer}
+.btn:hover{filter:brightness(1.06)}
+.btn.ghost{background:transparent;color:var(--signal)}
+.sent{font-family:var(--mono);font-size:11.5px;color:var(--signal);margin-left:10px}
+
+footer{border-top:1px solid var(--line);margin-top:70px}
+.foot-inner{max-width:var(--w);margin:0 auto;padding:26px 22px 60px;color:var(--faint);font-size:12px}
+.foot-inner a{color:var(--muted)}
+.src{font-family:var(--mono);font-size:11px;line-height:1.9;word-break:break-all}
+.note-box{font-size:12.5px;color:var(--muted);background:var(--panel-2);border:1px dashed var(--line-2);border-radius:9px;padding:11px 14px;margin-top:14px}
+@media print{.nav,.theme-toggle{display:none}body{background:#fff}}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="brand">
+      <span class="wordmark">nmp<span class="cursor"></span>dsci</span>
+      <span class="brand-role">// databricks control plan</span>
+    </div>
+    <div class="nav-links">
+      <a href="#built">Built</a>
+      <a href="#where">Where to code</a>
+      <a href="#claude">Claude ↔ DBX</a>
+      <a href="#runway">Runway</a>
+      <a href="#rounds">Rounds</a>
+      <a href="#decide">Decide</a>
+      <a href="#risks">Risks</a>
+      <button class="theme-toggle" id="themeBtn" aria-label="Toggle theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="kicker">databricks-spike · solutions architect loop · rounds 2–4</p>
+    <h1>Full control of Databricks, driven from <span class="accent">this terminal</span>.</h1>
+    <p class="hero-sub">The repo is built and committed. This is the plan for the rest: where to write code for each interview round, how Claude actually reaches into a Databricks workspace, what to install before the Free Edition rounds, and the one decision you owe the recruiter this week. The short version: <strong>author locally, deploy with Asset Bundles, demo in the browser</strong> — except in Round&nbsp;3, where using the platform's own tools <em>is</em> the test.</p>
+    <div class="metrics">
+      <div class="met"><span class="met-n">24</span><span class="met-l">files committed</span></div>
+      <div class="met"><span class="met-n">4</span><span class="met-l">notebooks, source format</span></div>
+      <div class="met"><span class="met-n">8</span><span class="met-l">dashboard widgets as code</span></div>
+      <div class="met"><span class="met-n">3</span><span class="met-l">Claude→Databricks paths</span></div>
+      <div class="met"><span class="met-n">2</span><span class="met-l">blockers before deploy</span></div>
+      <div class="met"><span class="met-n">1</span><span class="met-l">decision owed to recruiter</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="note-box">
+  <strong>How to read this:</strong> Section&nbsp;01 is what already exists and what is <em>verified</em> versus <em>written but unrun</em>. Section&nbsp;02 answers your actual question — local versus Databricks — and Section&nbsp;05 turns that answer into a per-round script. Sections&nbsp;04 and&nbsp;07 are the things that will bite you if skipped. Section&nbsp;06 has two choices to send back.
+</div>
+
+<!-- ========================= 1. BUILT ========================= -->
+<section id="built">
+  <h2><span class="snum">01</span>What is already on disk</h2>
+  <p class="sec-sub"><code>databricks-spike/</code> is now a git repo with one commit. It is a working medallion pipeline plus the machinery to push it into a workspace. Every design choice in it falls out of a documented Free Edition limit, which makes each one something you can defend out loud.</p>
+
+  <div class="grid g3" style="margin-top:18px">
+    <div class="card">
+      <div class="tag-row"><span class="pill">the trick</span></div>
+      <h4>Notebooks as plain <code>.py</code></h4>
+      <p>Files start with <code># Databricks notebook source</code> and split cells with <code># COMMAND ----------</code>. Databricks renders them as real notebooks; git sees clean Python.</p>
+      <p class="one">No conversion step in either direction. This is the whole local↔cloud story.</p>
+    </div>
+    <div class="card">
+      <div class="tag-row"><span class="pill">the discipline</span></div>
+      <h4>Logic outside the notebooks</h4>
+      <p>Every cleaning rule is a pure function in <code>src/lib/transforms.py</code> with a unit test. Notebooks read a table, call a transform, write a table.</p>
+      <p class="one">Five-second test loop instead of a four-minute job run — and reviewable as code.</p>
+    </div>
+    <div class="card">
+      <div class="tag-row"><span class="pill">the deliverable</span></div>
+      <h4>Dashboard as code</h4>
+      <p>An 8-widget AI/BI dashboard lives as <code>.lvdash.json</code>, deployed by the bundle, with a <code>make pull-dashboard</code> round-trip for UI edits.</p>
+      <p class="one">Edit visually where that is faster; the repo stays the source of truth.</p>
+    </div>
+  </div>
+
+  <h3 class="blk">The pipeline you will be demoing</h3>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart TD
+  G["<b>00 · generate</b><br/>Spark synthesises 500k orders<br/>dirt injected on purpose"]
+  V[("UC Volume<br/>landing/orders/*.json")]
+  B["<b>01 · bronze</b><br/>Auto Loader, availableNow<br/>append-only, schema declared"]
+  S["<b>02 · silver</b><br/>typed · country normalised<br/>deduped by ingest time<br/>invalid rows KEPT + flagged"]
+  D1["<b>gold_daily_revenue</b><br/>date × country × channel × category"]
+  D2["<b>gold_quality_summary</b><br/>rows failed, by reason"]
+  DASH["AI/BI dashboard<br/>+ Genie questions"]
+
+  G --> V --> B --> S
+  S --> D1
+  S --> D2
+  D1 --> DASH
+  D2 --> DASH
+    </pre>
+    <p class="dia-cap">Silver keeps bad rows with a <code>_quality</code> array rather than filtering them — so the revenue dashboard and the quality dashboard read the same table, and "what happened to the missing 8%?" has an answer in the data.</p>
+  </div>
+
+  <h3 class="blk">Verified versus written-but-unrun</h3>
+  <p class="sec-sub">Being straight about this matters more than the file count. Nothing has touched a workspace yet, because the CLI is not installed and there is no Free Edition account.</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:30%">Thing</th><th style="width:22%">Status</th><th>How I know / what is left</th></tr></thead>
+      <tbody>
+        <tr><td class="step">Repo structure, git commit</td><td><span class="pill">verified</span></td><td>24 files, one commit on <code>main</code>. Not yet pushed anywhere.</td></tr>
+        <tr><td class="step">Lint &amp; formatting</td><td><span class="pill">verified</span></td><td><code>ruff check</code> and <code>ruff format --check</code> both clean.</td></tr>
+        <tr><td class="step">Notebook source format</td><td><span class="pill">verified</span></td><td>All four files carry the magic header; 6–8 cells each.</td></tr>
+        <tr><td class="step">Dashboard JSON coherence</td><td><span class="pill">verified</span></td><td>Parsed and cross-checked: every widget's encoding <code>fieldName</code> resolves to a declared query field, every query to a declared dataset.</td></tr>
+        <tr><td class="step">Shell scripts, Python syntax</td><td><span class="pill">verified</span></td><td><code>bash -n</code> and <code>py_compile</code> clean.</td></tr>
+        <tr><td class="step">Unit tests actually pass</td><td><span class="pill fail">blocked</span></td><td>Local Spark cannot start on this Mac — <strong>not a repo problem</strong>. See Section&nbsp;07.</td></tr>
+        <tr><td class="step"><code>databricks bundle validate</code></td><td><span class="pill amber">unrun</span></td><td>CLI not installed and no workspace to point at. First thing after signup.</td></tr>
+        <tr><td class="step">Dashboard renders in AI/BI</td><td><span class="pill amber">unrun</span></td><td>JSON is structurally sound but the widget-spec schema is only partly documented. Expect one round of UI fixes, then <code>make pull-dashboard</code>.</td></tr>
+        <tr><td class="step">Auto Loader on Free serverless</td><td><span class="pill amber">unrun</span></td><td>Should work against a UC Volume. Fallback is a plain <code>spark.read.json</code> — a two-line change if it misbehaves.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ========================= 2. WHERE TO CODE ========================= -->
+<section id="where">
+  <h2><span class="snum">02</span>The decision: code here, or code in Databricks?</h2>
+  <p class="sec-sub">This is the question you asked, and the honest answer is that it depends on what is being scored. In two of the four rounds nobody watches you type. In one of them, <em>how</em> you use the platform is the entire test. Pick per round, not once.</p>
+
+  <div class="grid g3" style="margin-top:18px">
+    <div class="opt-card">
+      <div class="opt-head">
+        <h4>A · Everything in Databricks</h4>
+        <span class="verdict">Use for Round 3 only</span>
+      </div>
+      <div class="opt-body">
+        <span class="lbl">What it looks like</span>
+        <ul>
+          <li>Notebooks authored in the browser</li>
+          <li>Databricks Assistant generates code</li>
+          <li>Git folder for version control</li>
+        </ul>
+        <span class="lbl">Why it wins there</span>
+        <ul>
+          <li>Round 3 explicitly scores "AI as a partner" on <em>their</em> platform, screen shared</li>
+          <li>Zero setup risk on the day</li>
+        </ul>
+        <span class="lbl">What it costs</span>
+        <ul>
+          <li class="cost">No fast test loop, no real diffs</li>
+          <li class="cost">Browser editing is slow for anything over ~50 lines</li>
+          <li class="cost">Jobs and dashboards must be hand-wired in the UI</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="opt-card">
+      <div class="opt-head">
+        <h4>B · Everything local</h4>
+        <span class="verdict">Too rigid on its own</span>
+      </div>
+      <div class="opt-body">
+        <span class="lbl">What it looks like</span>
+        <ul>
+          <li>Author here, <code>make deploy</code>, read job logs in the terminal</li>
+          <li>Never open the workspace UI</li>
+        </ul>
+        <span class="lbl">Why it appeals</span>
+        <ul>
+          <li>Fast, versioned, agent-drivable</li>
+          <li>Reproducible from a clean workspace</li>
+        </ul>
+        <span class="lbl">What it costs</span>
+        <ul>
+          <li class="cost">Dashboards are genuinely painful to build blind in JSON</li>
+          <li class="cost">You would never see Genie, lineage or the Assistant — the things that make a demo land</li>
+          <li class="cost">In Round 3 it reads as avoiding the platform</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="opt-card win">
+      <div class="opt-head">
+        <h4>C · Hybrid <span class="pill">recommended</span></h4>
+        <span class="verdict">Default for rounds 2 and 4</span>
+      </div>
+      <div class="opt-body">
+        <span class="lbl">What it looks like</span>
+        <ul>
+          <li>Logic, notebooks and SQL authored here with Claude</li>
+          <li><code>make ship</code> pushes and runs; logs stream back</li>
+          <li>Dashboards drafted as code, polished in the UI, pulled back</li>
+          <li><code>make sync --watch</code> when iterating on one notebook live</li>
+        </ul>
+        <span class="lbl">Why it wins</span>
+        <ul>
+          <li>Terminal speed <em>and</em> a browser you can screen-share</li>
+          <li>Everything is reproducible — you can destroy and rebuild the demo in minutes</li>
+          <li>Round 4 gives you four hours; this is what makes four hours enough</li>
+        </ul>
+        <span class="lbl">What it costs</span>
+        <ul>
+          <li class="cost">One-time CLI + auth setup</li>
+          <li class="cost">Dashboard round-trip is a habit you must not forget</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="blk">The two loops, and when each one is right</h3>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart LR
+  subgraph L["Local · this repo"]
+    ED["Edit with Claude<br/>notebooks · transforms · SQL"]
+    T["make test<br/><i>~5s, no workspace</i>"]
+  end
+
+  subgraph W["Databricks workspace"]
+    NB["Notebooks render<br/>+ Assistant"]
+    JOB["Serverless job<br/>4 tasks"]
+    DASH["AI/BI dashboard<br/>+ Genie"]
+  end
+
+  ED --> T
+  T -->|"make deploy<br/><b>bundle: code + jobs + dashboards</b>"| JOB
+  T -.->|"make sync --watch<br/><i>files only, instant</i>"| NB
+  JOB --> DASH
+  JOB -->|"run logs stream to terminal"| ED
+  DASH -->|"make pull-dashboard<br/>UI edits come home"| ED
+    </pre>
+    <p class="dia-cap">Solid line: the deploy path, for when the job graph or dashboard changed. Dotted line: the watcher, for when you are hammering one notebook and want the browser to keep up with every save.</p>
+  </div>
+
+  <div class="callout star">
+    <h4>◆ The rule of thumb</h4>
+    <p><strong>Nobody is watching → work locally.</strong> You get tests, diffs and an agent. <strong>Someone is watching → work in the browser</strong>, with the repo already deployed behind you so you are editing something that exists rather than building from nothing. The worst outcome is screen-sharing a terminal while a panel of Solutions Architects waits to see their own product.</p>
+  </div>
+</section>
+
+<!-- ========================= 3. CLAUDE ========================= -->
+<section id="claude">
+  <h2><span class="snum">03</span>How well does Claude reach into Databricks?</h2>
+  <p class="sec-sub">Better than you might expect, but not through one magic connector. There are three distinct paths and they are useful at different moments. Path&nbsp;1 is the workhorse and needs no integration work at all.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:20%">Path</th><th style="width:13%">Effort</th><th style="width:14%">Free Edition</th><th>What Claude can actually do</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="step">1 · CLI + Asset Bundles<br><span class="pill">workhorse</span></td>
+          <td class="nw">Already wired</td>
+          <td><span class="pill">works</span></td>
+          <td>This is the real integration. I run <code>make ship</code>, read the deploy output and the streamed job logs, see the stack trace, fix the notebook, redeploy. A complete write→run→observe→fix loop with no MCP server involved. <strong>Everything in Section 05 assumes this and nothing more.</strong></td>
+        </tr>
+        <tr>
+          <td class="step">2 · Databricks managed MCP<br><span class="pill grey">nice-to-have</span></td>
+          <td class="nw">~20 min</td>
+          <td><span class="pill amber">PAT only</span></td>
+          <td>Databricks hosts MCP servers at <code>/api/2.0/mcp/…</code> for Unity Catalog functions, Genie spaces and vector search. Adding one lets me query table metadata and ask Genie questions without you pasting results back. The docs' recommended OAuth route needs the <em>account console</em>, which Free Edition does not have — so use a personal access token.</td>
+        </tr>
+        <tr>
+          <td class="step">3 · Databricks Assistant<br><span class="pill">part of the test</span></td>
+          <td class="nw">Zero</td>
+          <td><span class="pill">works</span></td>
+          <td>Built into the notebook and SQL editor. Not something I drive — but in Round 3 the interviewers want to see you use it, catch it when it hallucinates, and correct it out loud. Treat it as a scored tool, not a convenience.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn" style="margin-top:18px">
+    <h4>⚑ The scratchpad trick, straight from their brief</h4>
+    <p>The Round 3 prep notes say: <em>"iterate AI prompts in a separate scratchpad before pasting into the notebook."</em> That scratchpad is this terminal. Ask me here for the PySpark, read it, judge it, then type or paste it into the Databricks notebook and narrate why. That is simultaneously the fastest path and a live demonstration of "you are the pilot" — which is the exact behaviour they say they are scoring.</p>
+  </div>
+
+  <h3 class="blk">Adding the MCP server, if you want path 2</h3>
+  <pre><span class="c"># Free Edition has no account console, so OAuth app registration is out.</span>
+<span class="c"># Create a PAT: Settings → Developer → Access tokens.</span>
+
+claude mcp add-json databricks-uc <span class="k">'{
+  "type": "http",
+  "url": "https://&lt;workspace&gt;.cloud.databricks.com/api/2.0/mcp/functions/workspace/retail_spike",
+  "headers": { "Authorization": "Bearer &lt;your-pat&gt;" }
+}'</span>
+
+<span class="c"># Genie space (once you have created one over the gold tables):</span>
+claude mcp add-json databricks-genie <span class="k">'{
+  "type": "http",
+  "url": "https://&lt;workspace&gt;.cloud.databricks.com/api/2.0/mcp/genie/&lt;space-id&gt;",
+  "headers": { "Authorization": "Bearer &lt;your-pat&gt;" }
+}'</span></pre>
+  <p class="sec-sub" style="margin-top:10px">Worth doing <em>after</em> the pipeline runs, not before. It is a multiplier on an existing setup, not a substitute for one — and it is a nice thing to mention in Round 2 when the topic of agents over governed data comes up.</p>
+</section>
+
+<!-- ========================= 4. RUNWAY ========================= -->
+<section id="runway">
+  <h2><span class="snum">04</span>Setup runway</h2>
+  <p class="sec-sub">Ordered by dependency, not importance. The first three unblock everything else and take under an hour together. Two items are blocked right now by things outside the repo.</p>
+
+  <div class="chk">
+    <div class="chk-row">
+      <input type="checkbox" id="c1">
+      <label class="chk-main" for="c1">Fix the machine's user lookup
+        <span class="chk-sub">macOS cannot resolve uid 501 to a username right now: <code>id -un</code> prints <code>501</code>, <code>brew</code>, <code>sudo</code> and local Spark all fail. <strong>Reboot.</strong> Until then <code>make test</code> cannot run.</span>
+      </label>
+      <span class="chk-when pill fail">blocker</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="c2">
+      <label class="chk-main" for="c2">Re-authenticate GitHub, push the repo public
+        <span class="chk-sub">Your <code>gh</code> token is expired. <code>gh auth login</code>, then <code>gh repo create nmp-dsci/databricks-spike --public --source=. --push</code>. Portfolio value on top of backup.</span>
+      </label>
+      <span class="chk-when pill fail">blocker</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="c3">
+      <label class="chk-main" for="c3">Sign up for Databricks Free Edition
+        <span class="chk-sub"><a href="https://www.databricks.com/learn/free-edition">databricks.com/learn/free-edition</a>. Verify with LinkedIn afterwards — it raises several of the resource caps. Note the workspace URL.</span>
+      </label>
+      <span class="chk-when pill amber">day 1</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="c4">
+      <label class="chk-main" for="c4">Install the CLI and authenticate
+        <span class="chk-sub"><code>make install</code> then <code>make auth</code>. The auth script tries OAuth first and drops to a personal access token if Free Edition refuses it — either way you end up with a working profile.</span>
+      </label>
+      <span class="chk-when pill amber">day 1</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="c5">
+      <label class="chk-main" for="c5">Start the warehouse, capture its id
+        <span class="chk-sub">SQL Warehouses → Serverless Starter → Connection details. Put the id in <code>databricks.yml</code> under <code>variables.warehouse_id.default</code>. The dashboard will not deploy without it.</span>
+      </label>
+      <span class="chk-when pill amber">day 1</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="c6">
+      <label class="chk-main" for="c6">First full deploy and run
+        <span class="chk-sub"><code>make ship</code>. Expect to fix something — most likely the dashboard JSON or an Auto Loader option. That debugging session is itself good preparation.</span>
+      </label>
+      <span class="chk-when pill amber">day 1</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="c7">
+      <label class="chk-main" for="c7">Polish the dashboard in the UI, pull it back
+        <span class="chk-sub">Add a country filter widget, fix any layout the JSON got wrong, then <code>make pull-dashboard</code> and commit. Proves the round-trip works before you need it under time pressure.</span>
+      </label>
+      <span class="chk-when pill">day 2</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="c8">
+      <label class="chk-main" for="c8">Create a Genie space over the gold tables
+        <span class="chk-sub">The <code>COMMENT</code>s in notebook 03 exist for exactly this. Ask it three business questions. This is the single highest-impact 15 minutes for the Round 4 demo.</span>
+      </label>
+      <span class="chk-when pill">day 2</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="c9">
+      <label class="chk-main" for="c9">Rehearse a cold rebuild, timed
+        <span class="chk-sub"><code>make destroy</code>, then <code>make ship</code> from scratch with a stopwatch. You need to know this number before Round 4, because it is your recovery budget when something breaks mid-build.</span>
+      </label>
+      <span class="chk-when pill">day 3</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="c10">
+      <label class="chk-main" for="c10">Optional: wire the MCP server
+        <span class="chk-sub">Section 03, path 2. Only worth it once everything above is green.</span>
+      </label>
+      <span class="chk-when pill grey">later</span>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 5. ROUNDS ========================= -->
+<section id="rounds">
+  <h2><span class="snum">05</span>Per-round game plan</h2>
+  <p class="sec-sub">What this repo is <em>for</em> changes at every stage. In Round 2 it is a memory aid you never open. In Round 4 it is the product.</p>
+
+  <div class="tl">
+
+    <div class="tl-item">
+      <div class="tl-dot">02</div>
+      <div class="tl-card">
+        <h4>Design &amp; Architecture <span class="pill grey">60 min</span> <span class="pill">1–2 SAs as stakeholders</span></h4>
+        <div class="tl-meta">mode · nothing shared · repo is rehearsal only</div>
+        <p>You are not coding. The value of the repo here is that every architectural claim you make is one you have actually implemented, so the follow-up question never catches you out. When they ask why you would not just filter bad rows at ingest, you have a real answer and a real table.</p>
+        <p><strong>Rehearse three trade-offs out loud</strong>, all of which live in the code: bronze keeps everything so silver can be rebuilt; silver flags rather than drops so one table serves both dashboards; gold is pre-aggregated because a 2X-Small warehouse should never scan row-level data for BI.</p>
+        <div class="tip"><b>Their stated #1 criterion is "think out loud."</b> Start with discovery questions, not a diagram. Their listed pitfall is literally "jumping the gun" — building before defining assumptions.</div>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot">03</div>
+      <div class="tl-card">
+        <h4>Coding / "vibe" pairing <span class="pill grey">60 min</span> <span class="pill amber">full screen share</span> <span class="pill amber">Free Edition</span></h4>
+        <div class="tl-meta">mode · Databricks-native, this terminal as scratchpad</div>
+        <p>Work in the Databricks notebook UI. Use the Assistant. Do <strong>not</strong> run a local deploy loop on camera — it reads as avoiding their product, and the round is explicitly about problem solving with AI tooling on the platform.</p>
+        <p>Have this repo <strong>already deployed</strong> before you join. Then a synthetic dataset, a Volume, working transform patterns and a warehouse all exist. When they hand you the data-generation prompt you are adapting a working pipeline, not starting at an empty cell.</p>
+        <div class="tip"><b>The scored behaviour is catching the AI being wrong.</b> Ask the Assistant for something you know it will get slightly off — a window function, or a join that will explode row counts — then say what is wrong and fix it. That single moment is what they are looking for.</div>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot">04</div>
+      <div class="tl-card">
+        <h4>Build, Demo, Pitch <span class="pill grey">4 h build</span> <span class="pill grey">60 min panel</span> <span class="pill fail">75% customer skills</span></h4>
+        <div class="tl-meta">mode · hybrid, and this is where the repo pays for itself</div>
+        <p>The prompt lands 24 hours ahead; the build is capped at four hours. Their own breakdown gives only <strong>1.5 hours to the technical build</strong>. You cannot spend that hour and a half fighting setup — which is precisely what everything above buys back.</p>
+        <p>Plan: rename the schema, swap the synthetic generator for whatever vertical the prompt names, adjust the gold aggregates, redeploy, repoint the dashboard. Ninety minutes is comfortable if the scaffold already runs, and impossible if it does not.</p>
+        <div class="tip"><b>Demo the dashboard and Genie, not the notebooks.</b> The panel plays a Business Leader, a CTO and a VP of Engineering. Two of those three do not want to see code. They score the story; the build is explicitly called "a prop", and it "does not all have to work behind the scenes."</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="callout star">
+    <h4>◆ One asset worth building that is not in the repo yet</h4>
+    <p>A <strong>one-slide architecture diagram</strong> of what you built, in the customer's language: sources → landing → bronze/silver/gold → dashboard + Genie, with the trade-off annotations. It serves Round 2 as a whiteboard reference and Round 4 as the opening slide. Say the word and I will generate it from the pipeline as it stands.</p>
+  </div>
+</section>
+
+<!-- ========================= 6. DECIDE ========================= -->
+<section id="decide">
+  <h2><span class="snum">06</span>Two things to decide</h2>
+  <p class="sec-sub">The first is on the recruiter's open-actions list and blocks scheduling. The second changes what I build next. Pick and queue; both go back to me as prompts.</p>
+
+  <div class="grid g2" style="margin-top:16px">
+
+    <form class="dform" data-lavish-question="spike" onsubmit="event.preventDefault();var c=new FormData(event.currentTarget).get('spike');if(!c)return;window.lavish.queuePrompt('For Interview 2 I am declaring the technical spike: '+c+'. Help me prepare depth in that area and adjust the repo to back it up.',{tag:'choice',text:'Spike: '+c,element:event.currentTarget,data:{question:'spike',answer:c}});var s=event.currentTarget.querySelector('.sent');s.textContent='queued ✓';">
+      <fieldset>
+        <legend>Interview 2 technical spike</legend>
+        <p class="q-help">The recruiter needs this before the coordinator can schedule. You go deep in 1–3 areas; this declares the first.</p>
+        <label class="dopt"><input type="radio" name="spike" value="Data Engineering / ELT" checked>
+          <span class="dtxt"><b>Data Engineering / ELT</b><span>Recommended. Matches your Atlassian Databricks/PySpark/Airflow years, matches the example scenario they gave (global data ingestion), and this repo <em>is</em> the artifact. AI/ML then arrives as upside rather than as your only card.</span></span></label>
+        <label class="dopt"><input type="radio" name="spike" value="AI/ML">
+          <span class="dtxt"><b>AI / ML</b><span>Your strongest recent work — six agentic systems, eval harnesses, MLOps. Higher ceiling, but you would be arguing MLOps depth to an SA panel whose default scenario is ingestion.</span></span></label>
+        <label class="dopt"><input type="radio" name="spike" value="Data Modeling &amp; Analytics">
+          <span class="dtxt"><b>Data Modeling &amp; Analytics</b><span>Modelling, aggregation, performance tuning, serving. Safe and well covered by the gold layer, but the least differentiating of the three.</span></span></label>
+        <label class="dopt"><input type="radio" name="spike" value="Other: GenAI systems on the Lakehouse">
+          <span class="dtxt"><b>Other — GenAI on the Lakehouse</b><span>Frame your own: governed NL→SQL, evaluation-driven agents, Genie and Agent Bricks. Highest differentiation, highest risk if the interviewer wants classic DE.</span></span></label>
+      </fieldset>
+      <div style="margin-top:12px"><button class="btn" type="submit">Queue this answer</button><span class="sent"></span></div>
+    </form>
+
+    <form class="dform" data-lavish-question="next" onsubmit="event.preventDefault();var c=new FormData(event.currentTarget).get('next');if(!c)return;window.lavish.queuePrompt('Next thing to build for the Databricks prep: '+c,{tag:'choice',text:'Next: '+c,element:event.currentTarget,data:{question:'next',answer:c}});var s=event.currentTarget.querySelector('.sent');s.textContent='queued ✓';">
+      <fieldset>
+        <legend>What should I build next?</legend>
+        <p class="q-help">Once you have a workspace and the first deploy is green, these are the highest-value additions in order of my preference.</p>
+        <label class="dopt"><input type="radio" name="next" value="architecture diagram + Round 2 talk track" checked>
+          <span class="dtxt"><b>Architecture diagram + talk track</b><span>The one-slide customer-language diagram from Section 05, plus a scripted set of trade-off answers to rehearse aloud. Serves rounds 2 and 4.</span></span></label>
+        <label class="dopt"><input type="radio" name="next" value="a Round 4 demo skeleton I can repoint at any vertical in 90 minutes">
+          <span class="dtxt"><b>Round 4 demo skeleton</b><span>Parameterise the generator so swapping retail for insurance, telco or logistics is a config change, not a rewrite. Directly buys back build time on the day.</span></span></label>
+        <label class="dopt"><input type="radio" name="next" value="a Lakeflow Declarative Pipelines version of the medallion flow">
+          <span class="dtxt"><b>A Lakeflow pipeline variant</b><span>Rebuild the same medallion flow declaratively, with expectations instead of hand-rolled quality flags. Lets you compare the two approaches out loud — a strong DE-spike move.</span></span></label>
+        <label class="dopt"><input type="radio" name="next" value="Databricks MCP wiring plus a Genie space over the gold tables">
+          <span class="dtxt"><b>MCP + Genie space</b><span>Path 2 from Section 03, plus the Genie space. Makes the "agents over governed data" story demonstrable rather than asserted.</span></span></label>
+      </fieldset>
+      <div style="margin-top:12px"><button class="btn" type="submit">Queue this answer</button><span class="sent"></span></div>
+    </form>
+
+  </div>
+</section>
+
+<!-- ========================= 7. RISKS ========================= -->
+<section id="risks">
+  <h2><span class="snum">07</span>Risks and open questions</h2>
+  <p class="sec-sub">Ordered by how much they would hurt if ignored until the day of an interview.</p>
+
+  <div class="callout red">
+    <h4>⚠ Your Mac cannot resolve its own user account</h4>
+    <p><code>id -un</code> returns <code>501</code> instead of <code>nathanphillips</code>, and <code>ls -l</code> shows numeric owners. Consequences seen directly: <code>brew install</code> crashes, <code>sudo</code> reports "you do not exist in the passwd database", and Spark dies with a Kerberos login error that has nothing to do with Kerberos. This is macOS DirectoryServices in a bad state — <strong>a reboot should clear it</strong>. Until then <code>make test</code> cannot run, so the unit tests in this repo are written but unproven. Everything else — the CLI, bundles, deploys, the workspace — is unaffected.</p>
+  </div>
+
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card">
+      <div class="tag-row"><span class="pill amber">medium</span></div>
+      <h4>Dashboard JSON may need UI repair</h4>
+      <p>The <code>.lvdash.json</code> widget-spec schema is only partly documented publicly. The file is internally consistent and uses documented widget types, but a spec version could be off.</p>
+      <p class="one">Mitigation is already in place: deploy, fix visually, <code>make pull-dashboard</code>. Budget 20 minutes the first time, and do it before Round 4, not during it.</p>
+    </div>
+    <div class="card">
+      <div class="tag-row"><span class="pill amber">medium</span></div>
+      <h4>OAuth on Free Edition is inconsistent</h4>
+      <p>Community reports disagree on whether <code>databricks auth login</code> completes against a Free Edition host. <code>scripts/auth.sh</code> tries OAuth and falls back to a PAT prompt, so either way you get a working profile.</p>
+      <p class="one">If you end up on a PAT: it is workspace-scoped and auto-revoked after 90 days of disuse. Fine for this, wrong for anything real — worth saying if asked.</p>
+    </div>
+    <div class="card">
+      <div class="tag-row"><span class="pill">low</span></div>
+      <h4>Free Edition quotas are tight</h4>
+      <p>One SQL warehouse, one active pipeline per type, 5 concurrent job tasks, apps auto-stop after 24 hours. The repo already fits inside all of these, but a Round 4 prompt asking for streaming plus batch plus an app could bump the ceiling.</p>
+      <p class="one">LinkedIn verification raises several caps. Do it on day 1, not on the day.</p>
+    </div>
+    <div class="card">
+      <div class="tag-row"><span class="pill">low</span></div>
+      <h4>Non-commercial, public data only</h4>
+      <p>Free Edition terms are non-commercial, and the interview brief forbids proprietary or confidential data outright. The repo generates everything in-workspace, which also sidesteps the restricted-egress limit.</p>
+      <p class="one">Two constraints, one design decision. Worth naming explicitly if anyone asks where the data came from.</p>
+    </div>
+  </div>
+
+  <h3 class="blk">Still open</h3>
+  <ul class="list-clean amber">
+    <li><strong>Interview dates.</strong> The coordinator schedules rounds 2 and 3 and has not come back yet. The runway above is three working days; confirm you have that much lead time before Round 3.</li>
+    <li><strong>The Setup &amp; Environment Guide for Round 4</strong> is a Google Doc linked in the recruiter pack. It may specify tools beyond the CLI. Worth opening early — it is on their action list and I cannot read it from here.</li>
+    <li><strong>Does the panel want the dashboard shared, or the notebook?</strong> The hiring manager's 15-minute prep call before Round 4 is the place to ask. Their guidance says the demo is a prop, which suggests dashboard-first, but confirming costs nothing.</li>
+  </ul>
+</section>
+
+</div>
+
+<footer>
+  <div class="foot-inner">
+    <p><strong>Sources.</strong> Recruiter interview pack (<code>ai-engineer-fit/applications/databrick-sa-2608/</code>), the repo as committed, and Databricks documentation current as of August 2026.</p>
+    <p class="src">
+      docs.databricks.com/aws/en/getting-started/free-edition-limitations ·
+      docs.databricks.com/aws/en/dev-tools/bundles/resources ·
+      docs.databricks.com/aws/en/agents/mcp-tools/connect-clients ·
+      docs.databricks.com/aws/en/repos/ ·
+      databricks.com/learn/free-edition
+    </p>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    var btn=document.getElementById('themeBtn');
+    btn.addEventListener('click',function(){
+      var cur=document.documentElement.getAttribute('data-theme');
+      var next=cur==='dark'?'light':'dark';
+      document.documentElement.setAttribute('data-theme',next);
+      try{localStorage.setItem('s00-theme',next)}catch(e){}
+    });
+  })();
+</script>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.esm.min.mjs";
+
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const paint = document.createElement("canvas").getContext("2d");
+  function toRgba(color) {
+    paint.clearRect(0, 0, 1, 1);
+    paint.fillStyle = "#000";
+    paint.fillStyle = color;
+    paint.fillRect(0, 0, 1, 1);
+    return paint.getImageData(0, 0, 1, 1).data;
+  }
+  function compositeRgba(foreground, background) {
+    const fa = foreground[3] / 255, ba = background[3] / 255;
+    const alpha = fa + ba * (1 - fa);
+    if (alpha === 0) return [0, 0, 0, 0];
+    return [
+      (foreground[0] * fa + background[0] * ba * (1 - fa)) / alpha,
+      (foreground[1] * fa + background[1] * ba * (1 - fa)) / alpha,
+      (foreground[2] * fa + background[2] * ba * (1 - fa)) / alpha,
+      alpha * 255,
+    ];
+  }
+  function pageIsDark() {
+    const root = document.documentElement;
+    const rootBackground = toRgba(getComputedStyle(root).backgroundColor);
+    const bodyBackground = document.body ? toRgba(getComputedStyle(document.body).backgroundColor) : [0, 0, 0, 0];
+    const [r, g, b, a] = compositeRgba(bodyBackground, rootBackground);
+    if (a > 0) return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
+    const cs = getComputedStyle(root).colorScheme;
+    if (cs.includes("dark") && !cs.includes("light")) return true;
+    if (cs.includes("light") && !cs.includes("dark")) return false;
+    return darkQuery.matches;
+  }
+
+  const diagrams = [...document.querySelectorAll(".mermaid")].map((el) => ({ el, src: el.textContent }));
+  let applied, rendering = false, queued = false;
+  function queueRender() { queued = true; if (rendering) return; void render(); }
+  async function render() {
+    rendering = true;
+    try {
+      while (queued) {
+        queued = false;
+        const theme = pageIsDark() ? "dark" : "default";
+        if (theme === applied) continue;
+        mermaid.initialize({ startOnLoad: false, theme, securityLevel: "strict" });
+        for (const { el, src } of diagrams) { el.removeAttribute("data-processed"); el.textContent = src; }
+        try { await mermaid.run({ nodes: diagrams.map((d) => d.el) }); }
+        catch (error) { console.error("Mermaid diagram render failed:", error); return; }
+        applied = theme;
+      }
+    } finally { rendering = false; if (queued) queueRender(); }
+  }
+  if (document.readyState === "complete") queueRender();
+  else window.addEventListener("load", queueRender, { once: true });
+  const themeObserver = new MutationObserver(queueRender);
+  for (const el of [document.documentElement, document.body]) {
+    if (!el) continue;
+    themeObserver.observe(el, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
+  }
+  document.addEventListener("change", queueRender, true);
+  document.addEventListener("transitionend", ({ propertyName }) => { if (propertyName === "background-color") queueRender(); }, true);
+  darkQuery.addEventListener("change", queueRender);
+</script>
+
+</body>
+</html>

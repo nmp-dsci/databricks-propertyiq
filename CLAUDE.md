@@ -15,6 +15,29 @@ the full picture; this file is the working agreement.
 - **No real data.** Free Edition is non-commercial use only, and the interview
   brief forbids proprietary or confidential data. Synthetic only.
 - **Never commit `.env`, tokens, or `~/.databrickscfg` contents.**
+- **Never write a person's name into this repo.** See below — this one is easy to
+  breach by accident.
+
+## No personal names, anywhere in this repo
+
+Nothing committed here may contain the name of a real person: not recruiters,
+interviewers, hiring managers, coordinators, panel members, colleagues, customers
+or referees. This holds for code, comments, commit messages, docs, notebooks,
+test fixtures, synthetic data, and `.lavish/` artifacts alike.
+
+**Why:** this repo is public. Prep material drawn from a private interview pack
+routinely carries the names of people who never agreed to appear in a public
+GitHub repo, and a search engine does not care that the surrounding context was
+flattering.
+
+**How to apply:** use the role instead — "the recruiter", "the coordinator", "the
+hiring manager", "the panel", "a Solutions Architect". Roles carry every bit of
+meaning the name did for planning purposes. Process detail, round structure,
+evaluation criteria and public product facts are all fine to include; they are
+common knowledge. It is specifically identities that stay out.
+
+Names belong in the private sibling project (`../ai-engineer-fit/`), not here. If
+you are pasting from there, scrub as you paste rather than afterwards.
 
 ## File conventions
 
