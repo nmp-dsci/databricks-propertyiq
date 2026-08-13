@@ -62,7 +62,7 @@ sql: ## Run a .sql file on the serverless warehouse. Usage: make sql FILE=src/sq
 
 .PHONY: pull-dashboard
 pull-dashboard: ## Pull UI edits back into dashboards/*.lvdash.json before committing
-	@$(DB) bundle generate dashboard --resource retail_overview -t $(TARGET) --force
+	@$(DB) bundle generate dashboard --resource property_overview -t $(TARGET) --force
 
 .PHONY: summary
 summary: ## Print deployed resource URLs

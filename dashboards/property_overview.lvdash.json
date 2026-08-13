@@ -1,0 +1,610 @@
+{
+  "datasets": [
+    {
+      "name": "ds_sales",
+      "displayName": "Monthly sales mart",
+      "queryLines": [
+        "SELECT postcode, suburb, property_type, area_band, zoning, month,\n",
+        "       total_sale_value, n_sold, avg_sale_price, median_sale_price\n",
+        "FROM workspace.propertyiq.gold_property_sales"
+      ],
+      "columns": [
+        {
+          "displayName": "Avg Sale Price",
+          "description": "Weighted average: sum of sale value over sale count. Safe under any rollup.",
+          "expression": "SUM(`total_sale_value`) / NULLIF(SUM(`n_sold`), 0)"
+        },
+        {
+          "displayName": "Sales",
+          "description": "Number of valid arms-length residential sales.",
+          "expression": "SUM(`n_sold`)"
+        }
+      ]
+    },
+    {
+      "name": "ds_rent",
+      "displayName": "Monthly rent mart",
+      "queryLines": [
+        "SELECT postcode, property_type, bedroom_band, month,\n",
+        "       total_weekly_rent, n_rented, avg_weekly_rent, median_weekly_rent\n",
+        "FROM workspace.propertyiq.gold_property_rent"
+      ],
+      "columns": [
+        {
+          "displayName": "Avg Weekly Rent",
+          "description": "Weighted average: sum of weekly rents over bond count.",
+          "expression": "SUM(`total_weekly_rent`) / NULLIF(SUM(`n_rented`), 0)"
+        },
+        {
+          "displayName": "Bonds",
+          "description": "Number of valid bond lodgements.",
+          "expression": "SUM(`n_rented`)"
+        }
+      ]
+    },
+    {
+      "name": "ds_yield",
+      "displayName": "Monthly yield mart",
+      "queryLines": [
+        "SELECT postcode, property_type, month,\n",
+        "       total_sale_value, n_sold, total_weekly_rent, n_rented,\n",
+        "       avg_sale_price, avg_weekly_rent, gross_yield_pct\n",
+        "FROM workspace.propertyiq.gold_property_yield"
+      ],
+      "columns": [
+        {
+          "displayName": "Gross Yield Pct",
+          "description": "52 x avg weekly rent / avg sale price x 100, recomputed from additive legs so it stays correct under any rollup.",
+          "expression": "5200 * (SUM(`total_weekly_rent`) / NULLIF(SUM(`n_rented`), 0)) / NULLIF(SUM(`total_sale_value`) / NULLIF(SUM(`n_sold`), 0), 0)"
+        }
+      ]
+    },
+    {
+      "name": "ds_quality",
+      "displayName": "Data quality reasons",
+      "queryLines": [
+        "SELECT dataset, month, reason, rows\n",
+        "FROM workspace.propertyiq.gold_quality_summary\n",
+        "WHERE reason <> 'ok'"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "filters",
+      "displayName": "Filters",
+      "pageType": "PAGE_TYPE_GLOBAL_FILTERS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "filter_month",
+            "queries": [
+              {
+                "name": "q_sales_month",
+                "query": {
+                  "datasetName": "ds_sales",
+                  "fields": [{ "name": "month", "expression": "`month`" }],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_rent_month",
+                "query": {
+                  "datasetName": "ds_rent",
+                  "fields": [{ "name": "month", "expression": "`month`" }],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_yield_month",
+                "query": {
+                  "datasetName": "ds_yield",
+                  "fields": [{ "name": "month", "expression": "`month`" }],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_quality_month",
+                "query": {
+                  "datasetName": "ds_quality",
+                  "fields": [{ "name": "month", "expression": "`month`" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  { "fieldName": "month", "displayName": "Month", "queryName": "q_sales_month" },
+                  { "fieldName": "month", "displayName": "Month", "queryName": "q_rent_month" },
+                  { "fieldName": "month", "displayName": "Month", "queryName": "q_yield_month" },
+                  { "fieldName": "month", "displayName": "Month", "queryName": "q_quality_month" }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Month" }
+            }
+          },
+          "position": { "x": 0, "y": 0, "width": 4, "height": 2 }
+        },
+        {
+          "widget": {
+            "name": "filter_postcode",
+            "queries": [
+              {
+                "name": "q_sales_pc",
+                "query": {
+                  "datasetName": "ds_sales",
+                  "fields": [{ "name": "postcode", "expression": "`postcode`" }],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_rent_pc",
+                "query": {
+                  "datasetName": "ds_rent",
+                  "fields": [{ "name": "postcode", "expression": "`postcode`" }],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_yield_pc",
+                "query": {
+                  "datasetName": "ds_yield",
+                  "fields": [{ "name": "postcode", "expression": "`postcode`" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  { "fieldName": "postcode", "displayName": "Postcode", "queryName": "q_sales_pc" },
+                  { "fieldName": "postcode", "displayName": "Postcode", "queryName": "q_rent_pc" },
+                  { "fieldName": "postcode", "displayName": "Postcode", "queryName": "q_yield_pc" }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Postcode" }
+            }
+          },
+          "position": { "x": 4, "y": 0, "width": 4, "height": 2 }
+        },
+        {
+          "widget": {
+            "name": "filter_ptype",
+            "queries": [
+              {
+                "name": "q_sales_pt",
+                "query": {
+                  "datasetName": "ds_sales",
+                  "fields": [{ "name": "property_type", "expression": "`property_type`" }],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_rent_pt",
+                "query": {
+                  "datasetName": "ds_rent",
+                  "fields": [{ "name": "property_type", "expression": "`property_type`" }],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_yield_pt",
+                "query": {
+                  "datasetName": "ds_yield",
+                  "fields": [{ "name": "property_type", "expression": "`property_type`" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  { "fieldName": "property_type", "displayName": "Type", "queryName": "q_sales_pt" },
+                  { "fieldName": "property_type", "displayName": "Type", "queryName": "q_rent_pt" },
+                  { "fieldName": "property_type", "displayName": "Type", "queryName": "q_yield_pt" }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Property type" }
+            }
+          },
+          "position": { "x": 8, "y": 0, "width": 4, "height": 2 }
+        }
+      ]
+    },
+    {
+      "name": "page_overview",
+      "displayName": "Overview",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "title",
+            "multilineTextboxSpec": { "lines": ["## NSW Property — prices, rents and yield"] }
+          },
+          "position": { "x": 0, "y": 0, "width": 12, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "subtitle",
+            "multilineTextboxSpec": {
+              "lines": [
+                "Valuer General sales + Rental Bond Board lodgements, monthly grain. Invalid rows are flagged, not deleted — the *Data quality* panel reads the same silver tables as every other number here."
+              ]
+            }
+          },
+          "position": { "x": 0, "y": 1, "width": 12, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "kpi_avg_price",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_sales",
+                  "fields": [
+                    { "name": "measure(Avg Sale Price)", "expression": "MEASURE(`Avg Sale Price`)" }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Avg Sale Price)",
+                  "displayName": "Avg sale price",
+                  "format": {
+                    "type": "number-currency",
+                    "currencyCode": "AUD",
+                    "abbreviation": "compact",
+                    "decimalPlaces": { "type": "max", "places": 1 }
+                  }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Avg sale price" }
+            }
+          },
+          "position": { "x": 0, "y": 2, "width": 3, "height": 4 }
+        },
+        {
+          "widget": {
+            "name": "kpi_avg_rent",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_rent",
+                  "fields": [
+                    { "name": "measure(Avg Weekly Rent)", "expression": "MEASURE(`Avg Weekly Rent`)" }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Avg Weekly Rent)",
+                  "displayName": "Avg weekly rent",
+                  "format": {
+                    "type": "number-currency",
+                    "currencyCode": "AUD",
+                    "abbreviation": "compact",
+                    "decimalPlaces": { "type": "max", "places": 0 }
+                  }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Avg weekly rent" }
+            }
+          },
+          "position": { "x": 3, "y": 2, "width": 3, "height": 4 }
+        },
+        {
+          "widget": {
+            "name": "kpi_yield",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_yield",
+                  "fields": [
+                    { "name": "measure(Gross Yield Pct)", "expression": "MEASURE(`Gross Yield Pct`)" }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Gross Yield Pct)",
+                  "displayName": "Gross yield %",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": { "type": "exact", "places": 2 }
+                  }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Gross yield %" }
+            }
+          },
+          "position": { "x": 6, "y": 2, "width": 3, "height": 4 }
+        },
+        {
+          "widget": {
+            "name": "kpi_sales",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_sales",
+                  "fields": [{ "name": "measure(Sales)", "expression": "MEASURE(`Sales`)" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Sales)",
+                  "displayName": "Sales",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "compact",
+                    "decimalPlaces": { "type": "max", "places": 1 }
+                  }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Valid sales counted" }
+            }
+          },
+          "position": { "x": 9, "y": 2, "width": 3, "height": 4 }
+        },
+        {
+          "widget": {
+            "name": "price_over_time",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_sales",
+                  "fields": [
+                    { "name": "monthly(month)", "expression": "DATE_TRUNC(\"MONTH\", `month`)" },
+                    { "name": "measure(Avg Sale Price)", "expression": "MEASURE(`Avg Sale Price`)" },
+                    { "name": "property_type", "expression": "`property_type`" }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": { "fieldName": "monthly(month)", "scale": { "type": "temporal" }, "displayName": "Month" },
+                "y": {
+                  "fieldName": "measure(Avg Sale Price)",
+                  "scale": { "type": "quantitative" },
+                  "displayName": "Avg sale price",
+                  "format": {
+                    "type": "number-currency",
+                    "currencyCode": "AUD",
+                    "abbreviation": "compact",
+                    "decimalPlaces": { "type": "max", "places": 0 }
+                  }
+                },
+                "color": { "fieldName": "property_type", "scale": { "type": "categorical" }, "displayName": "Type" }
+              },
+              "frame": { "showTitle": true, "title": "Average sale price over time" }
+            }
+          },
+          "position": { "x": 0, "y": 6, "width": 6, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "rent_over_time",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_rent",
+                  "fields": [
+                    { "name": "monthly(month)", "expression": "DATE_TRUNC(\"MONTH\", `month`)" },
+                    { "name": "measure(Avg Weekly Rent)", "expression": "MEASURE(`Avg Weekly Rent`)" },
+                    { "name": "property_type", "expression": "`property_type`" }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": { "fieldName": "monthly(month)", "scale": { "type": "temporal" }, "displayName": "Month" },
+                "y": {
+                  "fieldName": "measure(Avg Weekly Rent)",
+                  "scale": { "type": "quantitative" },
+                  "displayName": "Avg weekly rent",
+                  "format": {
+                    "type": "number-currency",
+                    "currencyCode": "AUD",
+                    "abbreviation": "compact",
+                    "decimalPlaces": { "type": "max", "places": 0 }
+                  }
+                },
+                "color": { "fieldName": "property_type", "scale": { "type": "categorical" }, "displayName": "Type" }
+              },
+              "frame": { "showTitle": true, "title": "Average weekly rent over time" }
+            }
+          },
+          "position": { "x": 6, "y": 6, "width": 6, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "yield_over_time",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_yield",
+                  "fields": [
+                    { "name": "monthly(month)", "expression": "DATE_TRUNC(\"MONTH\", `month`)" },
+                    { "name": "measure(Gross Yield Pct)", "expression": "MEASURE(`Gross Yield Pct`)" },
+                    { "name": "property_type", "expression": "`property_type`" }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": { "fieldName": "monthly(month)", "scale": { "type": "temporal" }, "displayName": "Month" },
+                "y": {
+                  "fieldName": "measure(Gross Yield Pct)",
+                  "scale": { "type": "quantitative" },
+                  "displayName": "Gross yield %",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": { "type": "exact", "places": 2 }
+                  }
+                },
+                "color": { "fieldName": "property_type", "scale": { "type": "categorical" }, "displayName": "Type" }
+              },
+              "frame": { "showTitle": true, "title": "Gross rental yield over time" }
+            }
+          },
+          "position": { "x": 0, "y": 12, "width": 6, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "quality_over_time",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_quality",
+                  "fields": [
+                    { "name": "monthly(month)", "expression": "DATE_TRUNC(\"MONTH\", `month`)" },
+                    { "name": "sum(rows)", "expression": "SUM(`rows`)" },
+                    { "name": "reason", "expression": "`reason`" }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "area",
+              "encodings": {
+                "x": { "fieldName": "monthly(month)", "scale": { "type": "temporal" }, "displayName": "Month" },
+                "y": {
+                  "fieldName": "sum(rows)",
+                  "scale": { "type": "quantitative" },
+                  "displayName": "Rows flagged",
+                  "format": { "type": "number-plain", "abbreviation": "compact", "decimalPlaces": { "type": "max", "places": 1 } }
+                },
+                "color": { "fieldName": "reason", "scale": { "type": "categorical" }, "displayName": "Reason" }
+              },
+              "frame": { "showTitle": true, "title": "Data quality — rows flagged, by reason" }
+            }
+          },
+          "position": { "x": 6, "y": 12, "width": 6, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "section_table",
+            "multilineTextboxSpec": { "lines": ["### Where yield is best (5+ sales and 5+ bonds in the month)"] }
+          },
+          "position": { "x": 0, "y": 18, "width": 12, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "yield_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_yield",
+                  "fields": [
+                    { "name": "postcode", "expression": "`postcode`" },
+                    { "name": "property_type", "expression": "`property_type`" },
+                    { "name": "month", "expression": "`month`" },
+                    { "name": "n_sold", "expression": "`n_sold`" },
+                    { "name": "n_rented", "expression": "`n_rented`" },
+                    { "name": "avg_sale_price", "expression": "`avg_sale_price`" },
+                    { "name": "avg_weekly_rent", "expression": "`avg_weekly_rent`" },
+                    { "name": "gross_yield_pct", "expression": "`gross_yield_pct`" }
+                  ],
+                  "disaggregated": true,
+                  "orders": [{ "direction": "DESC", "expression": "`gross_yield_pct`" }]
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  { "fieldName": "postcode", "displayName": "Postcode" },
+                  { "fieldName": "property_type", "displayName": "Type" },
+                  { "fieldName": "month", "displayName": "Month" },
+                  { "fieldName": "n_sold", "displayName": "Sales" },
+                  { "fieldName": "n_rented", "displayName": "Bonds" },
+                  {
+                    "fieldName": "avg_sale_price",
+                    "displayName": "Avg price",
+                    "format": { "type": "number-currency", "currencyCode": "AUD", "abbreviation": "compact", "decimalPlaces": { "type": "max", "places": 1 } }
+                  },
+                  {
+                    "fieldName": "avg_weekly_rent",
+                    "displayName": "Avg rent/wk",
+                    "format": { "type": "number-currency", "currencyCode": "AUD", "abbreviation": "compact", "decimalPlaces": { "type": "max", "places": 0 } }
+                  },
+                  {
+                    "fieldName": "gross_yield_pct",
+                    "displayName": "Yield %",
+                    "format": { "type": "number-plain", "decimalPlaces": { "type": "exact", "places": 2 } }
+                  }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Yield by postcode / type / month" }
+            }
+          },
+          "position": { "x": 0, "y": 19, "width": 12, "height": 7 }
+        }
+      ]
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "canvasBackgroundColor": { "light": "#FCFCFC", "dark": "#1F272D" },
+      "widgetBackgroundColor": { "light": "#FFFFFF", "dark": "#11171C" },
+      "widgetBorderColor": { "light": "#FFFFFF", "dark": "#11171C" },
+      "fontColor": { "light": "#11171C", "dark": "#E8ECF0" },
+      "selectionColor": { "light": "#2272B4", "dark": "#8ACAFF" },
+      "visualizationColors": ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#D55E00", "#56B4E9", "#F0E442"],
+      "widgetHeaderAlignment": "LEFT"
+    }
+  }
+}

@@ -6,8 +6,13 @@ variables:
     description: Unity Catalog catalog. Free Edition ships with `workspace`.
     default: workspace
   schema:
-    description: Schema holding bronze/silver/gold tables.
-    default: retail_spike
+    description: Schema holding bronze/silver/gold tables and the landing volume.
+    default: propertyiq
+  volume:
+    description: >-
+      UC volume (inside the schema) holding the landed source files —
+      today the two monolith CSVs, later the updates-only Parquet feed.
+    default: propertyiq
   warehouse_id:
     description: >-
       Serverless SQL warehouse id, used by dashboards and SQL tasks.
@@ -15,9 +20,6 @@ variables:
       SQL Warehouses > (your warehouse) > Connection details.
       Override per-deploy with --var="warehouse_id=..." for a different workspace.
     default: 7f9b6eb116a15acc
-  rows:
-    description: Number of synthetic order rows to generate.
-    default: "500000"
 
 include:
   - resources/jobs/*.yml

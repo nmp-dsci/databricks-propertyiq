@@ -1,7 +1,7 @@
 resources:
   jobs:
     medallion:
-      name: retail-medallion
+      name: propertyiq-medallion
       # Free Edition allows 5 concurrent job tasks; this job runs 4 in sequence.
       max_concurrent_runs: 1
 
@@ -12,17 +12,11 @@ resources:
           default: ${var.catalog}
         - name: schema
           default: ${var.schema}
-        - name: rows
-          default: ${var.rows}
+        - name: volume
+          default: ${var.volume}
 
       tasks:
-        - task_key: generate
-          notebook_task:
-            notebook_path: ../../src/notebooks/00_generate_data.py
-
         - task_key: bronze
-          depends_on:
-            - task_key: generate
           notebook_task:
             notebook_path: ../../src/notebooks/01_bronze_ingest.py
 
@@ -37,6 +31,14 @@ resources:
             - task_key: silver
           notebook_task:
             notebook_path: ../../src/notebooks/03_gold_aggregate.py
+
+        # Last on purpose: a failed check fails the run, so bad numbers stop
+        # here instead of reaching the dashboard.
+        - task_key: checks
+          depends_on:
+            - task_key: gold
+          notebook_task:
+            notebook_path: ../../src/notebooks/04_checks.py
 
       queue:
         enabled: true
