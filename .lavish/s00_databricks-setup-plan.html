@@ -212,8 +212,8 @@ footer{border-top:1px solid var(--line);margin-top:70px}
       <div class="met"><span class="met-n">2</span><span class="met-l">commands: make test · make ship</span></div>
       <div class="met"><span class="met-n">6.42M</span><span class="met-l">property rows already in the volume</span></div>
       <div class="met"><span class="met-n">7</span><span class="met-l">dbt models feeding the silver rules</span></div>
-      <div class="met"><span class="met-n">1</span><span class="met-l">day to an end-to-end slice</span></div>
-      <div class="met"><span class="met-n">2</span><span class="met-l">decisions queued below</span></div>
+      <div class="met"><span class="met-n">✓</span><span class="met-l">end-to-end slice SHIPPED</span></div>
+      <div class="met"><span class="met-n">3.97%</span><span class="met-l">Sydney CBD unit yield, live in gold</span></div>
     </div>
   </div>
 </header>
@@ -238,8 +238,8 @@ footer{border-top:1px solid var(--line);margin-top:70px}
         <tr><td class="step">CLI + workspace auth</td><td><span class="pill">verified</span></td><td>CLI v1.12.1, OAuth profile <code>DEFAULT</code> valid (OAuth worked on Free Edition — no PAT on disk). Recovery path if it ever breaks: <code>make auth</code>, token fallback built in.</td></tr>
         <tr><td class="step">Bundle validates, both targets</td><td><span class="pill">verified</span></td><td>Two fixes: removed the self-referential <code>host: ${workspace.host}</code> (host comes from the CLI profile); wired the Serverless Starter Warehouse id (<code>2X-Small</code>) into <code>databricks.yml</code>. <code>--strict</code> clean.</td></tr>
         <tr><td class="step">PropertyIQ data in the workspace</td><td><span class="pill">verified</span></td><td>Schema <code>workspace.propertyiq</code>, volume <code>propertyiq</code>: <code>nswgov_df.csv</code> (3.09M sales rows, 585&nbsp;MB) and <code>rentboard_df.csv</code> (3.31M bond rows, 76&nbsp;MB), profiled via serverless SQL. No tables registered yet.</td></tr>
-        <tr><td class="step">First deploy (<code>make ship</code>)</td><td><span class="pill amber">unrun</span></td><td>Nothing has deployed yet. Section&nbsp;04 makes the first deploy the property pipeline rather than the synthetic retail rehearsal.</td></tr>
-        <tr><td class="step">Uncommitted work</td><td><span class="pill amber">pending</span></td><td><code>databricks.yml</code>, <code>tests/conftest.py</code>, <code>tests/test_transforms.py</code>, this page. Commit before the pipeline build starts.</td></tr>
+        <tr><td class="step">First deploy (<code>make ship</code>)</td><td><span class="pill">verified</span></td><td><strong>propertyiq-medallion ran green end to end</strong> — bronze → silver → gold → checks, ~2 min on serverless. Second attempt: the first failed on a real 6-digit date under serverless ANSI mode (fixed with <code>try_to_timestamp</code>, fixture added).</td></tr>
+        <tr><td class="step">Definition of done</td><td><span class="pill">verified</span></td><td><code>SELECT * FROM gold_property_yield WHERE postcode='2000'</code> → Sydney CBD units at <strong>3.97%</strong> gross yield (May 2026). 62,662 yield cells, range 0.33–22.74%, inside the plausibility band. Dashboard deployed. All work committed.</td></tr>
       </tbody>
     </table>
   </div>
@@ -415,36 +415,36 @@ flowchart TD
 
   <div class="chk">
     <div class="chk-row">
-      <input type="checkbox" id="r1">
-      <label class="chk-main" for="r1">Commit the pending fixes
+      <input type="checkbox" id="r1" checked>
+      <label class="chk-main" for="r1"><s>Commit the pending fixes</s>
         <span class="chk-sub"><code>databricks.yml</code>, the two test files, this page. Clean slate before the build.</span>
       </label>
-      <span class="chk-when pill amber">next</span>
+      <span class="chk-when pill">done</span>
     </div>
     <div class="chk-row">
-      <input type="checkbox" id="r2">
-      <label class="chk-main" for="r2">Repoint the bundle at propertyiq
+      <input type="checkbox" id="r2" checked>
+      <label class="chk-main" for="r2"><s>Repoint the bundle at propertyiq</s>
         <span class="chk-sub">Schema variable <code>retail_spike</code> → <code>propertyiq</code>; bronze notebooks fork into sales/rent reading the volume CSVs (Auto Loader, all-STRING declared schema); job graph gains the second source.</span>
       </label>
       <span class="chk-when pill amber">next</span>
     </div>
     <div class="chk-row">
-      <input type="checkbox" id="r3">
-      <label class="chk-main" for="r3">Port silver rules into transforms.py, with tests
+      <input type="checkbox" id="r3" checked>
+      <label class="chk-main" for="r3"><s>Port silver rules into transforms.py, with tests</s>
         <span class="chk-sub">The Section 04 rules, one pure function each, fixtures covering both sales encoding eras (pre-2024 float-damaged, post-2024 clean). Biggest single step; entirely local until green.</span>
       </label>
       <span class="chk-when pill amber">next</span>
     </div>
     <div class="chk-row">
-      <input type="checkbox" id="r4">
-      <label class="chk-main" for="r4">Gold marts + first <code>make ship</code>
+      <input type="checkbox" id="r4" checked>
+      <label class="chk-main" for="r4"><s>Gold marts + first <code>make ship</code></s>
         <span class="chk-sub">Three gold tables + post-load sanity checks (grain unique, ≥10 postcodes covered, yield within 0.3–25%) as a failing-loudly job task. Then the first real deploy and run.</span>
       </label>
       <span class="chk-when pill">then</span>
     </div>
     <div class="chk-row">
-      <input type="checkbox" id="r5">
-      <label class="chk-main" for="r5">Dashboard + SQL-editor proof
+      <input type="checkbox" id="r5" checked>
+      <label class="chk-main" for="r5"><s>Dashboard + SQL-editor proof</s>
         <span class="chk-sub">Repoint the dashboard-as-code at the property marts (price, rent, yield, quality panel), polish in the UI, <code>make pull-dashboard</code>. Run the definition-of-done queries. <strong>End-to-end proven here.</strong></span>
       </label>
       <span class="chk-when pill">then</span>
