@@ -120,9 +120,12 @@ class TestQualityFlags:
 
     def test_reasons_accumulate(self, spark):
         """A row can fail more than one check, and should report all of them."""
+        # Spelled-out schema, not inference: customer_id and country are null in
+        # the only row, so there is nothing for Spark to infer a type from.
         df = spark.createDataFrame(
             [("ORD-X", None, None, -1, 0.0)],
-            ["order_id", "customer_id", "country", "quantity", "unit_price"],
+            "order_id string, customer_id bigint, country string, "
+            "quantity bigint, unit_price double",
         )
         reasons = set(flag_quality(df).collect()[0]._quality)
         assert reasons == {
