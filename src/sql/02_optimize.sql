@@ -4,48 +4,51 @@
 -- ---------------------------------------------------------------------------
 -- What is this table actually doing? Read the plan before optimising anything.
 -- ---------------------------------------------------------------------------
-DESCRIBE DETAIL workspace.retail_spike.silver_orders;
+DESCRIBE DETAIL workspace.propertyiq.silver_sales;
 
 EXPLAIN FORMATTED
-SELECT country, sum(revenue)
-FROM workspace.retail_spike.silver_orders
-WHERE order_date >= current_date() - INTERVAL 30 DAYS
-GROUP BY country;
+SELECT postcode, sum(sale_price)
+FROM workspace.propertyiq.silver_sales
+WHERE sale_date >= current_date() - INTERVAL 365 DAYS
+GROUP BY postcode;
 
 -- ---------------------------------------------------------------------------
 -- Liquid clustering instead of partitioning. Partitioning on a low-cardinality
--- column like `country` produces small files and skew; liquid clustering gets
--- the same skipping without committing to a fixed physical layout.
+-- column like `postcode` produces small files and skew; liquid clustering gets
+-- the same skipping without committing to a fixed physical layout. This is set
+-- at write time in 02_silver_clean.py; re-running it here is how you'd change
+-- the clustering columns without a full rewrite pipeline.
 -- ---------------------------------------------------------------------------
-ALTER TABLE workspace.retail_spike.silver_orders
-  CLUSTER BY (order_date, country);
+ALTER TABLE workspace.propertyiq.silver_sales
+  CLUSTER BY (postcode, sale_month);
 
-OPTIMIZE workspace.retail_spike.silver_orders;
+OPTIMIZE workspace.propertyiq.silver_sales;
 
 -- ---------------------------------------------------------------------------
 -- Time travel — the answer to "the numbers changed, what did yesterday's run
 -- produce?" Also the cheapest rollback story there is.
 -- ---------------------------------------------------------------------------
-DESCRIBE HISTORY workspace.retail_spike.silver_orders;
+DESCRIBE HISTORY workspace.propertyiq.silver_sales;
 
-SELECT count(*) FROM workspace.retail_spike.silver_orders VERSION AS OF 0;
+SELECT count(*) FROM workspace.propertyiq.silver_sales VERSION AS OF 0;
 
 -- ---------------------------------------------------------------------------
 -- Lineage and governance live in Unity Catalog, not in a wiki page.
 -- ---------------------------------------------------------------------------
-SHOW TABLES IN workspace.retail_spike;
+SHOW TABLES IN workspace.propertyiq;
 
-DESCRIBE TABLE EXTENDED workspace.retail_spike.gold_daily_revenue;
+DESCRIBE TABLE EXTENDED workspace.propertyiq.gold_property_sales;
 
 -- ---------------------------------------------------------------------------
--- Row filters / column masks: how you answer "can the AU team see US data?"
--- without maintaining a second copy of the table.
+-- Row filters / column masks: how you answer "can the retail team see
+-- individual sale prices, or only the aggregated marts?" without maintaining
+-- a second copy of the table.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION workspace.retail_spike.country_filter(country STRING)
-  RETURN is_account_group_member('admins') OR country = 'AU';
+CREATE OR REPLACE FUNCTION workspace.propertyiq.postcode_filter(postcode STRING)
+  RETURN is_account_group_member('admins') OR postcode = '2000';
 
 -- Apply with:
---   ALTER TABLE workspace.retail_spike.silver_orders
---     SET ROW FILTER workspace.retail_spike.country_filter ON (country);
+--   ALTER TABLE workspace.propertyiq.silver_sales
+--     SET ROW FILTER workspace.propertyiq.postcode_filter ON (postcode);
 -- Remove with:
---   ALTER TABLE workspace.retail_spike.silver_orders DROP ROW FILTER;
+--   ALTER TABLE workspace.propertyiq.silver_sales DROP ROW FILTER;
