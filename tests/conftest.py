@@ -9,7 +9,7 @@ instead of a Py4J stack trace.
 from __future__ import annotations
 
 import os
-import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -25,18 +25,33 @@ CANDIDATE_JDKS = (
 )
 
 
+def _java_runs(java: str = "java") -> bool:
+    """Whether this java actually starts.
+
+    macOS ships a /usr/bin/java stub that is present and executable on every Mac
+    and only fails when invoked, so an existence check reports success on a
+    machine with no JDK at all — and pyspark then dies with JAVA_GATEWAY_EXITED
+    rather than skipping. Run it.
+    """
+    try:
+        return subprocess.run([java, "-version"], capture_output=True, check=False).returncode == 0
+    except OSError:
+        return False
+
+
 def _ensure_java() -> str | None:
     """Return a usable JAVA_HOME, exporting it if Java isn't already on PATH."""
-    if os.environ.get("JAVA_HOME") and Path(os.environ["JAVA_HOME"], "bin/java").exists():
-        return os.environ["JAVA_HOME"]
+    java_home = os.environ.get("JAVA_HOME")
+    if java_home and _java_runs(str(Path(java_home, "bin/java"))):
+        return java_home
 
-    if shutil.which("java"):
+    if _java_runs():
         return os.environ.get("JAVA_HOME", "")
 
     for candidate in CANDIDATE_JDKS:
         # Homebrew's keg root is itself a valid JAVA_HOME via libexec.
         for home in (Path(candidate, "libexec/openjdk.jdk/Contents/Home"), Path(candidate)):
-            if (home / "bin/java").exists():
+            if _java_runs(str(home / "bin/java")):
                 os.environ["JAVA_HOME"] = str(home)
                 os.environ["PATH"] = f"{home / 'bin'}{os.pathsep}{os.environ['PATH']}"
                 return str(home)

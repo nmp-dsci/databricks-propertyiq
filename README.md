@@ -16,8 +16,8 @@ internet. Every choice below falls out of those limits.
 ```
 databricks.yml                 bundle definition — targets, variables
 resources/
-  jobs/medallion_job.yml       4-task serverless job (generate → bronze → silver → gold)
-  dashboards/retail_overview.yml
+  jobs/medallion_job.yml       4-task serverless job (bronze → silver → gold → checks)
+  dashboards/property_overview.yml
 src/
   notebooks/*.py               Databricks source-format notebooks (render as notebooks up there)
   lib/transforms.py            the actual logic — pure, unit-tested, no I/O
@@ -94,7 +94,7 @@ Dashboards are miserable to hand-edit as JSON and excellent to edit in the UI, s
 the workflow is a round-trip:
 
 ```bash
-make deploy           # 1. push dashboards/retail_overview.lvdash.json
+make deploy           # 1. push dashboards/property_overview.lvdash.json
                       # 2. rearrange / restyle in the Databricks UI
 make pull-dashboard   # 3. write the UI version back into the repo
 git commit            # 4. it's code again
@@ -103,7 +103,7 @@ git commit            # 4. it's code again
 `embed_credentials: false` in the resource means a deploy **errors** rather than
 silently overwriting UI edits you forgot to pull.
 
-> The dashboard SQL hardcodes `workspace.retail_spike.*`. The `.lvdash.json` is
+> The dashboard SQL hardcodes `workspace.propertyiq.*`. The `.lvdash.json` is
 > deployed verbatim — bundle variables are not substituted inside it. If you
 > change catalog or schema, change it there too.
 
@@ -111,32 +111,44 @@ silently overwriting UI edits you forgot to pull.
 
 ## The pipeline
 
-A medallion pipeline over synthetic retail orders. It is small on purpose; what
-matters is that every layer has a defensible reason to exist.
-
-**00 · generate** — Free Edition can't reach the public internet, so data is
-synthesised with Spark and landed as JSON files in a UC Volume. Dirt is injected
-deliberately: ~1% duplicates (at-least-once upstream), ~1.5% negative quantities
-(returns mis-keyed), ~2% null customers, and junk country codes.
+A medallion pipeline over real NSW property data: Valuer General property
+sales (~3.1M rows) and Rental Bond Board rental lodgements (~3.3M rows),
+already uploaded as CSVs into the `workspace.propertyiq` Unity Catalog volume.
+The rules are a deliberate port of tested dbt models from a sibling project
+(`data-qa-agent`), with one intentional divergence explained below.
 
 **01 · bronze** — Auto Loader (`cloudFiles`) with `Trigger.AvailableNow`:
-streaming file-tracking semantics on a batch cadence. Append-only, schema
-declared not inferred, unexpected fields land in `_rescued_data` instead of
-failing the run. Bronze is the rebuild point when silver logic turns out wrong.
+streaming file-tracking semantics on a batch cadence, reading the two landed
+CSVs straight from the volume. Append-only, every column declared as `STRING`
+(the landing contract, not inferred), unexpected fields land in `_rescued_data`
+instead of failing the run. Bronze is the rebuild point when silver logic turns
+out wrong.
 
-**02 · silver** — Typed, country codes normalised, deduplicated by
-`row_number()` over ingest time (not `dropDuplicates`, so a late correction
-deterministically wins). **Invalid rows are kept**, with a `_quality` array
-naming every rule they failed. Delta `CHECK` constraints make the contract
-enforceable rather than aspirational.
+**02 · silver** — Typed, repaired and quality-flagged, ported from the dbt
+`stg_sales` / `stg_rent` models that cleaned this exact data for Postgres.
+**Invalid rows are kept**, with a `_quality` array naming every rule they
+failed, rather than dropped in a `WHERE` clause as the dbt originals do — gold
+applies the filter instead, so the quality dashboard and the price dashboard
+read from the same table. Delta `NOT NULL` constraints on the surrogate keys
+make the contract enforceable rather than aspirational.
 
-**03 · gold** — Two narrow aggregates the 2X-Small warehouse can scan instantly.
-Tables and columns carry `COMMENT`s, which is what lets Genie answer questions
-against them in plain English.
+**03 · gold** — Three monthly marts (`gold_property_sales`,
+`gold_property_rent`, `gold_property_yield`) plus a `gold_quality_summary`
+rollup, sized for the 2X-Small warehouse to scan in well under a second.
+Additive legs (`total_*`, `n_*`) come first so any rollup to quarter or region
+recomputes ratios correctly by summing legs, never by averaging averages.
+Tables and columns carry `COMMENT`s lifted from the dbt project's docs, which
+is what lets Genie answer questions against them in plain English.
 
-Keeping bad rows in silver rather than filtering them means the revenue dashboard
+**04 · checks** — a port of the dbt project's singular tests, run last so a
+bad build fails the job instead of quietly reaching the dashboard: grain
+uniqueness on each mart, coverage floors (did the build silently produce
+almost nothing), and a plausibility band on yield (0.3–25% — outside that is a
+units bug, not a market).
+
+Keeping bad rows in silver rather than filtering them means the price dashboard
 and the data-quality dashboard read the same table — so "what happened to the
-missing 8%?" has an answer in the data instead of in someone's memory.
+missing rows?" has an answer in the data instead of in someone's memory.
 
 ---
 
@@ -147,9 +159,17 @@ function. The notebooks import it and do orchestration only.
 
 That buys a 5-second local test cycle (`make test`) instead of a 4-minute job
 run, and it makes the rules reviewable as code. The tests cover each rule
-individually, plus the cases that are easy to get wrong: duplicates where the
-later row corrected a value, rows failing several checks at once, and the
-guarantee that gold's totals exclude exactly what quality-summary reports.
+individually, plus the cases that are easy to get wrong: all three numeric
+encoding eras in the source data landing on the same value, rows failing
+several checks at once, and the guarantee that gold's totals exclude exactly
+what quality-summary reports.
+
+One real bug surfaced this way: Databricks serverless SQL runs in ANSI mode,
+where `to_date`/casts *throw* on malformed input (the real data contains a
+genuine 6-digit date, `'170823'`), while local Spark used for the unit tests
+silently returns `NULL` for the same input under non-ANSI mode. Fixed by
+switching to `try_to_timestamp` and regex-guarded casts everywhere date and
+numeric parsing happens, with a test fixture added to cover it.
 
 ---
 
@@ -160,9 +180,9 @@ guarantee that gold's totals exclude exactly what quality-summary reports.
 | Serverless compute only | No `job_clusters:` anywhere — omitting compute *is* the config |
 | One 2X-Small warehouse | Dashboards read pre-aggregated gold, never row-level silver |
 | 5 concurrent job tasks | Job is a 4-task sequential DAG |
-| Restricted outbound internet | Data is generated in-workspace, never downloaded |
+| Restricted outbound internet | Source CSVs are uploaded into a UC volume ahead of time, never downloaded by the pipeline itself |
 | No account-level API | Everything is workspace-scoped; no service principals |
-| Non-commercial use only | Synthetic data only — no proprietary or customer data |
+| Non-commercial use only | Public open government data only (NSW Valuer General, Rental Bond Board) — no proprietary or customer data |
 
 Sources: [Free Edition limitations](https://docs.databricks.com/aws/en/getting-started/free-edition-limitations)
 

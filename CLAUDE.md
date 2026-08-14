@@ -11,9 +11,14 @@ the full picture; this file is the working agreement.
   omitting compute config *is* the serverless config.
 - **No outbound internet.** Free Edition egress is restricted to trusted
   domains. Never write code that downloads a dataset, hits a public API, or
-  `pip install`s at runtime from an arbitrary index. Data is generated in-workspace.
-- **No real data.** Free Edition is non-commercial use only, and the interview
-  brief forbids proprietary or confidential data. Synthetic only.
+  `pip install`s at runtime from an arbitrary index — this is about the
+  workspace's own egress, not about how source data was originally obtained.
+- **Public open data only.** This repo's data is NSW Valuer General property
+  sales and NSW Rental Bond Board rental lodgements — both public, open
+  government datasets, uploaded as CSVs into a Unity Catalog volume by a
+  separate local pipeline that runs outside the workspace. Free Edition is
+  non-commercial use only. Never add proprietary, confidential, commercial, or
+  personal data.
 - **Never commit `.env`, tokens, or `~/.databrickscfg` contents.**
 - **Never write a person's name into this repo.** See below — this one is easy to
   breach by accident.
@@ -90,6 +95,9 @@ layout and formatting are far quicker in the UI. If you change it in the UI, run
 
 This repo backs preparation for a Databricks Solutions Architect interview loop
 (design/architecture round, a live pair-programming round on Free Edition, and a
-build-demo-pitch round). Code should be **explainable out loud**: prefer the
-approach whose trade-off is easy to articulate over the clever one. Comments
-should say *why*, since that is what gets asked.
+build-demo-pitch round). The work product is PropertyIQ: a real end-to-end
+pipeline that lands NSW property sales and rental data through
+bronze/silver/gold and surfaces it in a deployed AI/BI dashboard. Code should
+be **explainable out loud**: prefer the approach whose trade-off is easy to
+articulate over the clever one. Comments should say *why*, since that is what
+gets asked.

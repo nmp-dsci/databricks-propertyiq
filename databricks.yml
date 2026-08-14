@@ -6,16 +6,20 @@ variables:
     description: Unity Catalog catalog. Free Edition ships with `workspace`.
     default: workspace
   schema:
-    description: Schema holding bronze/silver/gold tables.
-    default: retail_spike
+    description: Schema holding bronze/silver/gold tables and the landing volume.
+    default: propertyiq
+  volume:
+    description: >-
+      UC volume (inside the schema) holding the landed source files —
+      today the two monolith CSVs, later the updates-only Parquet feed.
+    default: propertyiq
   warehouse_id:
     description: >-
       Serverless SQL warehouse id, used by dashboards and SQL tasks.
-      Find it under SQL Warehouses > (your warehouse) > Connection details.
-    default: ""
-  rows:
-    description: Number of synthetic order rows to generate.
-    default: "500000"
+      Find it with `databricks warehouses list`, or under
+      SQL Warehouses > (your warehouse) > Connection details.
+      Override per-deploy with --var="warehouse_id=..." for a different workspace.
+    default: 7f9b6eb116a15acc
 
 include:
   - resources/jobs/*.yml
@@ -24,18 +28,20 @@ include:
 targets:
   # Default target. Deploys under /Workspace/Users/<you>/.bundle/... so nothing
   # collides with hand-made notebooks. Jobs are paused; run them by hand.
+  # No `host:` here on purpose. The host comes from the CLI profile
+  # (`--profile`, which the Makefile always passes), so the same file works
+  # against any workspace without an edit. Naming a host here would also have
+  # to be a literal URL — `${workspace.host}` is a reference to the field being
+  # defined, so it never resolves and the bundle fails to validate.
   dev:
     mode: development
     default: true
-    workspace:
-      host: ${workspace.host}
 
   # Same workspace, but deployed as a "real" release: unprefixed names,
   # schedules live. Useful for the Interview 4 demo build.
   demo:
     mode: production
     workspace:
-      host: ${workspace.host}
       root_path: /Workspace/Shared/.bundle/${bundle.name}
     permissions:
       - level: CAN_MANAGE

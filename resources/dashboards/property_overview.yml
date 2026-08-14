@@ -1,8 +1,8 @@
 resources:
   dashboards:
-    retail_overview:
-      display_name: Retail Overview
-      file_path: ../../dashboards/retail_overview.lvdash.json
+    property_overview:
+      display_name: PropertyIQ Overview
+      file_path: ../../dashboards/property_overview.lvdash.json
       warehouse_id: ${var.warehouse_id}
       # Dashboards are edited in the Databricks UI far more comfortably than in
       # JSON. Round-trip workflow:

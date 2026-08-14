@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Databricks Control Plan: local repo to live workspace</title>
+<title>Databricks Control Plan: setup to first PropertyIQ pipeline</title>
 <script>
   (function(){
     var t; try{t=localStorage.getItem('s00-theme')}catch(e){}
@@ -104,21 +104,6 @@ h3.blk::before{content:"";width:7px;height:7px;border-radius:2px;background:var(
 .pill.grey{background:var(--panel-2);color:var(--faint);border:1px solid var(--line)}
 .tag-row{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}
 
-/* option cards */
-.opt-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
-.opt-card.win{border-color:var(--signal);border-width:1.5px}
-.opt-head{padding:15px 18px 12px;border-bottom:1px solid var(--line);background:var(--panel-2)}
-.opt-card.win .opt-head{background:var(--signal-soft)}
-.opt-head h4{font-size:15.5px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-.opt-head .verdict{font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);display:block;margin-top:5px}
-.opt-card.win .opt-head .verdict{color:var(--signal)}
-.opt-body{padding:14px 18px 16px;flex:1}
-.opt-body .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);margin:12px 0 5px;display:block}
-.opt-body .lbl:first-child{margin-top:0}
-.opt-body ul{margin:0;padding-left:18px}
-.opt-body li{font-size:13px;color:var(--ink-soft);margin:4px 0}
-.opt-body li.cost{color:var(--muted)}
-
 /* tables */
 .tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);margin-top:8px}
 table{border-collapse:collapse;width:100%;font-size:13.5px;background:var(--panel)}
@@ -159,18 +144,6 @@ code:not(pre code){font-family:var(--mono);font-size:.88em;background:var(--pane
 .diagram-card .mermaid{min-width:300px;display:flex;justify-content:center;font-family:var(--sans);margin-top:6px}
 .diagram-card .mermaid svg{max-width:100%;height:auto}
 .dia-cap{font-size:12.5px;color:var(--faint);text-align:center;margin:2px 0 8px}
-
-/* timeline */
-.tl{position:relative;margin-top:14px;padding-left:6px}
-.tl-item{position:relative;padding:0 0 6px 30px;border-left:2px solid var(--line-2);margin-left:9px}
-.tl-item:last-child{border-left-color:transparent}
-.tl-dot{position:absolute;left:-11px;top:2px;width:20px;height:20px;border-radius:50%;background:var(--panel);border:2px solid var(--signal);color:var(--signal);font-family:var(--mono);font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center}
-.tl-card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-bottom:14px;box-shadow:var(--shadow)}
-.tl-card h4{font-size:14.5px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-.tl-meta{font-family:var(--mono);font-size:11px;color:var(--faint);margin:5px 0 7px}
-.tl-card p{font-size:13.5px;color:var(--ink-soft);margin:6px 0}
-.tl-card .tip{font-size:12.5px;color:var(--ink-soft);background:var(--panel-2);border-radius:7px;padding:9px 11px;margin-top:9px;border:1px solid var(--line)}
-.tl-card .tip b{color:var(--signal)}
 
 /* checklist */
 .chk{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;margin-top:10px}
@@ -216,11 +189,12 @@ footer{border-top:1px solid var(--line);margin-top:70px}
       <span class="brand-role">// databricks control plan</span>
     </div>
     <div class="nav-links">
-      <a href="#built">Built</a>
-      <a href="#where">Where to code</a>
+      <a href="#status">Status</a>
+      <a href="#loop">The loop</a>
       <a href="#claude">Claude ↔ DBX</a>
+      <a href="#pipeline">First pipeline</a>
+      <a href="#contract">Updates-only</a>
       <a href="#runway">Runway</a>
-      <a href="#rounds">Rounds</a>
       <a href="#decide">Decide</a>
       <a href="#risks">Risks</a>
       <button class="theme-toggle" id="themeBtn" aria-label="Toggle theme">◑</button>
@@ -230,16 +204,16 @@ footer{border-top:1px solid var(--line);margin-top:70px}
 
 <header class="hero">
   <div class="hero-inner">
-    <p class="kicker">databricks-spike · solutions architect loop · rounds 2–4</p>
-    <h1>Full control of Databricks, driven from <span class="accent">this terminal</span>.</h1>
-    <p class="hero-sub">The repo is built and committed. This is the plan for the rest: where to write code for each interview round, how Claude actually reaches into a Databricks workspace, what to install before the Free Edition rounds, and the one decision you owe the recruiter this week. The short version: <strong>author locally, deploy with Asset Bundles, demo in the browser</strong> — except in Round&nbsp;3, where using the platform's own tools <em>is</em> the test.</p>
+    <p class="kicker">databricks-spike · setup → first propertyiq pipeline · iterate locally, see it in databricks</p>
+    <h1>Set up once, then <span class="accent">iterate from this terminal</span>.</h1>
+    <p class="hero-sub">This page is the working plan for exactly what you asked: <strong>author locally with Claude, deploy with one command, see the result in Databricks, repeat</strong> — and use that loop to stand up the first PropertyIQ pipeline, so NSW sales and rents are queryable in the SQL editor, a notebook, and a dashboard, proving the flow end to end. Setup is done (Section&nbsp;01); the loop is live (Section&nbsp;02); the pipeline is the next build (Section&nbsp;04).</p>
     <div class="metrics">
-      <div class="met"><span class="met-n">24</span><span class="met-l">files committed</span></div>
-      <div class="met"><span class="met-n">4</span><span class="met-l">notebooks, source format</span></div>
-      <div class="met"><span class="met-n">8</span><span class="met-l">dashboard widgets as code</span></div>
-      <div class="met"><span class="met-n">3</span><span class="met-l">Claude→Databricks paths</span></div>
-      <div class="met"><span class="met-n">2</span><span class="met-l">blockers before deploy</span></div>
-      <div class="met"><span class="met-n">1</span><span class="met-l">decision owed to recruiter</span></div>
+      <div class="met"><span class="met-n">✓</span><span class="met-l">setup complete · 0 blockers</span></div>
+      <div class="met"><span class="met-n">2</span><span class="met-l">commands: make test · make ship</span></div>
+      <div class="met"><span class="met-n">6.42M</span><span class="met-l">property rows already in the volume</span></div>
+      <div class="met"><span class="met-n">7</span><span class="met-l">dbt models feeding the silver rules</span></div>
+      <div class="met"><span class="met-n">✓</span><span class="met-l">end-to-end slice SHIPPED</span></div>
+      <div class="met"><span class="met-n">3.97%</span><span class="met-l">Sydney CBD unit yield, live in gold</span></div>
     </div>
   </div>
 </header>
@@ -247,409 +221,287 @@ footer{border-top:1px solid var(--line);margin-top:70px}
 <div class="wrap">
 
 <div class="note-box">
-  <strong>How to read this:</strong> Section&nbsp;01 is what already exists and what is <em>verified</em> versus <em>written but unrun</em>. Section&nbsp;02 answers your actual question — local versus Databricks — and Section&nbsp;05 turns that answer into a per-round script. Sections&nbsp;04 and&nbsp;07 are the things that will bite you if skipped. Section&nbsp;06 has two choices to send back.
+  <strong>How to read this:</strong> Sections 01–03 are the restored setup-and-workflow half: what is green, how the local↔Databricks loop works, and every way Claude reaches the workspace. Sections 04–05 are the PropertyIQ half: the fastest end-to-end slice first, then the updates-only Parquet contract as the iteration after it. Section&nbsp;06 is the ordered runway across both. The retired interview-round game plan lives in git history (<code>git log -- .lavish/</code>).
 </div>
 
-<!-- ========================= 1. BUILT ========================= -->
-<section id="built">
-  <h2><span class="snum">01</span>What is already on disk</h2>
-  <p class="sec-sub"><code>databricks-spike/</code> is now a git repo with one commit. It is a working medallion pipeline plus the machinery to push it into a workspace. Every design choice in it falls out of a documented Free Edition limit, which makes each one something you can defend out loud.</p>
+<!-- ========================= 1. STATUS ========================= -->
+<section id="status">
+  <h2><span class="snum">01</span>Setup status: everything green</h2>
+  <p class="sec-sub">The runway that used to fill this page is complete. Kept here as the record of what was fixed, because two of the fixes are the kind that recur.</p>
 
-  <div class="grid g3" style="margin-top:18px">
-    <div class="card">
-      <div class="tag-row"><span class="pill">the trick</span></div>
-      <h4>Notebooks as plain <code>.py</code></h4>
-      <p>Files start with <code># Databricks notebook source</code> and split cells with <code># COMMAND ----------</code>. Databricks renders them as real notebooks; git sees clean Python.</p>
-      <p class="one">No conversion step in either direction. This is the whole local↔cloud story.</p>
-    </div>
-    <div class="card">
-      <div class="tag-row"><span class="pill">the discipline</span></div>
-      <h4>Logic outside the notebooks</h4>
-      <p>Every cleaning rule is a pure function in <code>src/lib/transforms.py</code> with a unit test. Notebooks read a table, call a transform, write a table.</p>
-      <p class="one">Five-second test loop instead of a four-minute job run — and reviewable as code.</p>
-    </div>
-    <div class="card">
-      <div class="tag-row"><span class="pill">the deliverable</span></div>
-      <h4>Dashboard as code</h4>
-      <p>An 8-widget AI/BI dashboard lives as <code>.lvdash.json</code>, deployed by the bundle, with a <code>make pull-dashboard</code> round-trip for UI edits.</p>
-      <p class="one">Edit visually where that is faster; the repo stays the source of truth.</p>
-    </div>
-  </div>
-
-  <h3 class="blk">The pipeline you will be demoing</h3>
-  <div class="diagram-card">
-    <pre class="mermaid">
-flowchart TD
-  G["<b>00 · generate</b><br/>Spark synthesises 500k orders<br/>dirt injected on purpose"]
-  V[("UC Volume<br/>landing/orders/*.json")]
-  B["<b>01 · bronze</b><br/>Auto Loader, availableNow<br/>append-only, schema declared"]
-  S["<b>02 · silver</b><br/>typed · country normalised<br/>deduped by ingest time<br/>invalid rows KEPT + flagged"]
-  D1["<b>gold_daily_revenue</b><br/>date × country × channel × category"]
-  D2["<b>gold_quality_summary</b><br/>rows failed, by reason"]
-  DASH["AI/BI dashboard<br/>+ Genie questions"]
-
-  G --> V --> B --> S
-  S --> D1
-  S --> D2
-  D1 --> DASH
-  D2 --> DASH
-    </pre>
-    <p class="dia-cap">Silver keeps bad rows with a <code>_quality</code> array rather than filtering them — so the revenue dashboard and the quality dashboard read the same table, and "what happened to the missing 8%?" has an answer in the data.</p>
-  </div>
-
-  <h3 class="blk">Verified versus written-but-unrun</h3>
-  <p class="sec-sub">Being straight about this matters more than the file count. Nothing has touched a workspace yet, because the CLI is not installed and there is no Free Edition account.</p>
   <div class="tbl-wrap">
     <table>
-      <thead><tr><th style="width:30%">Thing</th><th style="width:22%">Status</th><th>How I know / what is left</th></tr></thead>
+      <thead><tr><th style="width:30%">Thing</th><th style="width:14%">Status</th><th>Detail</th></tr></thead>
       <tbody>
-        <tr><td class="step">Repo structure, git commit</td><td><span class="pill">verified</span></td><td>24 files, one commit on <code>main</code>. Not yet pushed anywhere.</td></tr>
-        <tr><td class="step">Lint &amp; formatting</td><td><span class="pill">verified</span></td><td><code>ruff check</code> and <code>ruff format --check</code> both clean.</td></tr>
-        <tr><td class="step">Notebook source format</td><td><span class="pill">verified</span></td><td>All four files carry the magic header; 6–8 cells each.</td></tr>
-        <tr><td class="step">Dashboard JSON coherence</td><td><span class="pill">verified</span></td><td>Parsed and cross-checked: every widget's encoding <code>fieldName</code> resolves to a declared query field, every query to a declared dataset.</td></tr>
-        <tr><td class="step">Shell scripts, Python syntax</td><td><span class="pill">verified</span></td><td><code>bash -n</code> and <code>py_compile</code> clean.</td></tr>
-        <tr><td class="step">Unit tests actually pass</td><td><span class="pill fail">blocked</span></td><td>Local Spark cannot start on this Mac — <strong>not a repo problem</strong>. See Section&nbsp;07.</td></tr>
-        <tr><td class="step"><code>databricks bundle validate</code></td><td><span class="pill amber">unrun</span></td><td>CLI not installed and no workspace to point at. First thing after signup.</td></tr>
-        <tr><td class="step">Dashboard renders in AI/BI</td><td><span class="pill amber">unrun</span></td><td>JSON is structurally sound but the widget-spec schema is only partly documented. Expect one round of UI fixes, then <code>make pull-dashboard</code>.</td></tr>
-        <tr><td class="step">Auto Loader on Free serverless</td><td><span class="pill amber">unrun</span></td><td>Should work against a UC Volume. Fallback is a plain <code>spark.read.json</code> — a two-line change if it misbehaves.</td></tr>
+        <tr><td class="step">Machine (uid lookup, JDK, jq)</td><td><span class="pill">verified</span></td><td>The reboot fixed <code>id -un</code>; <code>openjdk@17</code> keg found; <code>jq</code> installed (<code>make sync</code> needs it). Watch for: Spark's "Kerberos" error really meaning broken uid lookup.</td></tr>
+        <tr><td class="step">Local tests</td><td><span class="pill">verified</span></td><td><strong>15/15 in ~13s.</strong> Two fixes: <code>conftest.py</code> probed Java with <code>shutil.which</code>, fooled by the macOS <code>/usr/bin/java</code> stub — now probes by running <code>java -version</code>; one test built an all-null column Spark couldn't type-infer — now has a DDL schema.</td></tr>
+        <tr><td class="step">CLI + workspace auth</td><td><span class="pill">verified</span></td><td>CLI v1.12.1, OAuth profile <code>DEFAULT</code> valid (OAuth worked on Free Edition — no PAT on disk). Recovery path if it ever breaks: <code>make auth</code>, token fallback built in.</td></tr>
+        <tr><td class="step">Bundle validates, both targets</td><td><span class="pill">verified</span></td><td>Two fixes: removed the self-referential <code>host: ${workspace.host}</code> (host comes from the CLI profile); wired the Serverless Starter Warehouse id (<code>2X-Small</code>) into <code>databricks.yml</code>. <code>--strict</code> clean.</td></tr>
+        <tr><td class="step">PropertyIQ data in the workspace</td><td><span class="pill">verified</span></td><td>Schema <code>workspace.propertyiq</code>, volume <code>propertyiq</code>: <code>nswgov_df.csv</code> (3.09M sales rows, 585&nbsp;MB) and <code>rentboard_df.csv</code> (3.31M bond rows, 76&nbsp;MB), profiled via serverless SQL. No tables registered yet.</td></tr>
+        <tr><td class="step">First deploy (<code>make ship</code>)</td><td><span class="pill">verified</span></td><td><strong>propertyiq-medallion ran green end to end</strong> — bronze → silver → gold → checks, ~2 min on serverless. Second attempt: the first failed on a real 6-digit date under serverless ANSI mode (fixed with <code>try_to_timestamp</code>, fixture added).</td></tr>
+        <tr><td class="step">Definition of done</td><td><span class="pill">verified</span></td><td><code>SELECT * FROM gold_property_yield WHERE postcode='2000'</code> → Sydney CBD units at <strong>3.97%</strong> gross yield (May 2026). 62,662 yield cells, range 0.33–22.74%, inside the plausibility band. Dashboard deployed. All work committed.</td></tr>
       </tbody>
     </table>
   </div>
 </section>
 
-<!-- ========================= 2. WHERE TO CODE ========================= -->
-<section id="where">
-  <h2><span class="snum">02</span>The decision: code here, or code in Databricks?</h2>
-  <p class="sec-sub">This is the question you asked, and the honest answer is that it depends on what is being scored. In two of the four rounds nobody watches you type. In one of them, <em>how</em> you use the platform is the entire test. Pick per round, not once.</p>
+<!-- ========================= 2. LOOP ========================= -->
+<section id="loop">
+  <h2><span class="snum">02</span>The working loop: local ↔ Databricks</h2>
+  <p class="sec-sub">The answer to "code here or code in Databricks" is both, on purpose: author and test locally where Claude, git and a 13-second test loop live; deploy and <em>look at</em> everything in the workspace, where notebooks render and dashboards exist. The bridge is Asset Bundles, and the whole loop is four make targets.</p>
 
-  <div class="grid g3" style="margin-top:18px">
-    <div class="opt-card">
-      <div class="opt-head">
-        <h4>A · Everything in Databricks</h4>
-        <span class="verdict">Use for Round 3 only</span>
-      </div>
-      <div class="opt-body">
-        <span class="lbl">What it looks like</span>
-        <ul>
-          <li>Notebooks authored in the browser</li>
-          <li>Databricks Assistant generates code</li>
-          <li>Git folder for version control</li>
-        </ul>
-        <span class="lbl">Why it wins there</span>
-        <ul>
-          <li>Round 3 explicitly scores "AI as a partner" on <em>their</em> platform, screen shared</li>
-          <li>Zero setup risk on the day</li>
-        </ul>
-        <span class="lbl">What it costs</span>
-        <ul>
-          <li class="cost">No fast test loop, no real diffs</li>
-          <li class="cost">Browser editing is slow for anything over ~50 lines</li>
-          <li class="cost">Jobs and dashboards must be hand-wired in the UI</li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="opt-card">
-      <div class="opt-head">
-        <h4>B · Everything local</h4>
-        <span class="verdict">Too rigid on its own</span>
-      </div>
-      <div class="opt-body">
-        <span class="lbl">What it looks like</span>
-        <ul>
-          <li>Author here, <code>make deploy</code>, read job logs in the terminal</li>
-          <li>Never open the workspace UI</li>
-        </ul>
-        <span class="lbl">Why it appeals</span>
-        <ul>
-          <li>Fast, versioned, agent-drivable</li>
-          <li>Reproducible from a clean workspace</li>
-        </ul>
-        <span class="lbl">What it costs</span>
-        <ul>
-          <li class="cost">Dashboards are genuinely painful to build blind in JSON</li>
-          <li class="cost">You would never see Genie, lineage or the Assistant — the things that make a demo land</li>
-          <li class="cost">In Round 3 it reads as avoiding the platform</li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="opt-card win">
-      <div class="opt-head">
-        <h4>C · Hybrid <span class="pill">recommended</span></h4>
-        <span class="verdict">Default for rounds 2 and 4</span>
-      </div>
-      <div class="opt-body">
-        <span class="lbl">What it looks like</span>
-        <ul>
-          <li>Logic, notebooks and SQL authored here with Claude</li>
-          <li><code>make ship</code> pushes and runs; logs stream back</li>
-          <li>Dashboards drafted as code, polished in the UI, pulled back</li>
-          <li><code>make sync --watch</code> when iterating on one notebook live</li>
-        </ul>
-        <span class="lbl">Why it wins</span>
-        <ul>
-          <li>Terminal speed <em>and</em> a browser you can screen-share</li>
-          <li>Everything is reproducible — you can destroy and rebuild the demo in minutes</li>
-          <li>Round 4 gives you four hours; this is what makes four hours enough</li>
-        </ul>
-        <span class="lbl">What it costs</span>
-        <ul>
-          <li class="cost">One-time CLI + auth setup</li>
-          <li class="cost">Dashboard round-trip is a habit you must not forget</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-
-  <h3 class="blk">The two loops, and when each one is right</h3>
   <div class="diagram-card">
     <pre class="mermaid">
 flowchart LR
   subgraph L["Local · this repo"]
     ED["Edit with Claude<br/>notebooks · transforms · SQL"]
-    T["make test<br/><i>~5s, no workspace</i>"]
+    T["make test<br/><i>~13s, no workspace</i>"]
   end
 
   subgraph W["Databricks workspace"]
-    NB["Notebooks render<br/>+ Assistant"]
-    JOB["Serverless job<br/>4 tasks"]
+    NB["Notebooks render<br/>+ SQL editor"]
+    JOB["Serverless job"]
     DASH["AI/BI dashboard<br/>+ Genie"]
   end
 
   ED --> T
   T -->|"make deploy<br/><b>bundle: code + jobs + dashboards</b>"| JOB
-  T -.->|"make sync --watch<br/><i>files only, instant</i>"| NB
+  T -.->|"make sync<br/><i>files only, instant</i>"| NB
   JOB --> DASH
   JOB -->|"run logs stream to terminal"| ED
   DASH -->|"make pull-dashboard<br/>UI edits come home"| ED
     </pre>
-    <p class="dia-cap">Solid line: the deploy path, for when the job graph or dashboard changed. Dotted line: the watcher, for when you are hammering one notebook and want the browser to keep up with every save.</p>
+    <p class="dia-cap">Solid line: the deploy path, when the job graph or dashboard changed. Dotted line: <code>make sync</code> live-mirrors file saves into the workspace for when you're hammering one notebook and want the browser to keep up.</p>
   </div>
+
+  <h3 class="blk">The commands — and where they come from</h3>
+  <p class="sec-sub">None of these are Databricks built-ins. They are <strong>targets in this repo's own <code>Makefile</code></strong>, written for this project, each a thin wrapper so you never have to remember flags. Under the hood they call one of three things: the <strong>Databricks CLI</strong> you installed (<code>~/.local/bin/databricks</code>, always invoked as <code>databricks --profile DEFAULT</code>, authed by your OAuth login), the <strong>Databricks Python SDK</strong> (<code>databricks-sdk</code>, installed into <code>.venv</code> by <code>uv sync</code>), or <strong>purely local tools</strong> (pytest, ruff) that never touch the workspace. The right column is the literal thing each target runs.</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:20%">Command</th><th style="width:44%">When</th><th>What it actually runs</th></tr></thead>
+      <tbody>
+        <tr><td class="mono nw">make test</td><td>After any transform change. Local Spark, no workspace, no cost. If this is red, nothing else matters yet.</td><td class="mono">uv run pytest — local only, works with zero Databricks setup</td></tr>
+        <tr><td class="mono nw">make ship</td><td>The inner loop: test → validate → deploy → run, job logs streaming back here. One command from edit to "it ran in Databricks".</td><td class="mono">pytest, then databricks bundle validate / deploy / run — CLI</td></tr>
+        <tr><td class="mono nw">make sync</td><td>Leave running while iterating on one notebook; every save appears in the workspace instantly. Files only — job/dashboard changes still need a deploy.</td><td class="mono">databricks sync --watch — CLI (+ jq to resolve your username)</td></tr>
+        <tr><td class="mono nw">make sql FILE=…</td><td>Run a local .sql file on the serverless warehouse from the terminal — the scriptable twin of the SQL editor.</td><td class="mono">scripts/run_sql.py via the Python SDK (WorkspaceClient), not the CLI</td></tr>
+        <tr><td class="mono nw">make pull-dashboard</td><td>After editing the dashboard in the UI, before committing. The repo stays the source of truth.</td><td class="mono">databricks bundle generate dashboard — CLI</td></tr>
+        <tr><td class="mono nw">make destroy</td><td>Wipe everything the bundle deployed; <code>make ship</code> rebuilds it from zero. This is what makes experiments cheap.</td><td class="mono">databricks bundle destroy — CLI</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="sec-sub" style="margin-top:10px">So: installing the CLI gave you the <code>databricks</code> binary and the OAuth profile; <code>uv sync</code> gave you the SDK and pytest; <strong>the Makefile is what composes them into a workflow</strong>, and it lives in git like everything else — <code>make help</code> lists every target with its one-line description.</p>
 
   <div class="callout star">
     <h4>◆ The rule of thumb</h4>
-    <p><strong>Nobody is watching → work locally.</strong> You get tests, diffs and an agent. <strong>Someone is watching → work in the browser</strong>, with the repo already deployed behind you so you are editing something that exists rather than building from nothing. The worst outcome is screen-sharing a terminal while a panel of Solutions Architects waits to see their own product.</p>
+    <p><strong>Writing logic → here</strong>, with tests and Claude. <strong>Looking at results → the browser</strong>: SQL editor for ad-hoc queries, notebook UI for exploration, dashboard for the end product. The loop exists so that "see it in Databricks" is never more than one <code>make ship</code> away from "edited it locally".</p>
   </div>
 </section>
 
 <!-- ========================= 3. CLAUDE ========================= -->
 <section id="claude">
-  <h2><span class="snum">03</span>How well does Claude reach into Databricks?</h2>
-  <p class="sec-sub">Better than you might expect, but not through one magic connector. There are three distinct paths and they are useful at different moments. Path&nbsp;1 is the workhorse and needs no integration work at all.</p>
+  <h2><span class="snum">03</span>How Claude reaches into Databricks</h2>
+  <p class="sec-sub">Three paths, in the order they matter. Path 1 is how everything in this conversation has already been happening — profiling your uploaded CSVs, listing warehouses, validating bundles.</p>
 
   <div class="tbl-wrap">
     <table>
-      <thead><tr><th style="width:20%">Path</th><th style="width:13%">Effort</th><th style="width:14%">Free Edition</th><th>What Claude can actually do</th></tr></thead>
+      <thead><tr><th style="width:22%">Path</th><th style="width:13%">Effort</th><th>What Claude can actually do</th></tr></thead>
       <tbody>
         <tr>
-          <td class="step">1 · CLI + Asset Bundles<br><span class="pill">workhorse</span></td>
+          <td class="step">1 · CLI + bundles<br><span class="pill">workhorse</span></td>
           <td class="nw">Already wired</td>
-          <td><span class="pill">works</span></td>
-          <td>This is the real integration. I run <code>make ship</code>, read the deploy output and the streamed job logs, see the stack trace, fix the notebook, redeploy. A complete write→run→observe→fix loop with no MCP server involved. <strong>Everything in Section 05 assumes this and nothing more.</strong></td>
+          <td>Run <code>make ship</code>, read deploy output and streamed job logs, query any table via serverless SQL (<code>databricks experimental aitools tools query</code>), inspect schemas/volumes/warehouses, fix, redeploy. A complete write→run→observe→fix loop — it profiled the 6.42M property rows earlier today with exactly this.</td>
         </tr>
         <tr>
-          <td class="step">2 · Databricks managed MCP<br><span class="pill grey">nice-to-have</span></td>
+          <td class="step">2 · Managed MCP<br><span class="pill grey">nice-to-have</span></td>
           <td class="nw">~20 min</td>
-          <td><span class="pill amber">PAT only</span></td>
-          <td>Databricks hosts MCP servers at <code>/api/2.0/mcp/…</code> for Unity Catalog functions, Genie spaces and vector search. Adding one lets me query table metadata and ask Genie questions without you pasting results back. The docs' recommended OAuth route needs the <em>account console</em>, which Free Edition does not have — so use a personal access token.</td>
+          <td>Databricks-hosted MCP servers (<code>/api/2.0/mcp/…</code>) for UC functions and Genie spaces — lets agents (including this terminal, or other projects' agents) query the marts through a governed interface. PAT auth on Free Edition. Worth wiring after the pipeline is green, not before.</td>
         </tr>
         <tr>
-          <td class="step">3 · Databricks Assistant<br><span class="pill">part of the test</span></td>
+          <td class="step">3 · Databricks Assistant<br><span class="pill grey">in-browser</span></td>
           <td class="nw">Zero</td>
-          <td><span class="pill">works</span></td>
-          <td>Built into the notebook and SQL editor. Not something I drive — but in Round 3 the interviewers want to see you use it, catch it when it hallucinates, and correct it out loud. Treat it as a scored tool, not a convenience.</td>
+          <td>Built into the notebook and SQL editor for when you're working in the browser. Complementary, not competing: this terminal is the scratchpad with repo context; the Assistant is handy for one-off SQL where you already are.</td>
         </tr>
       </tbody>
     </table>
   </div>
-
-  <div class="callout warn" style="margin-top:18px">
-    <h4>⚑ The scratchpad trick, straight from their brief</h4>
-    <p>The Round 3 prep notes say: <em>"iterate AI prompts in a separate scratchpad before pasting into the notebook."</em> That scratchpad is this terminal. Ask me here for the PySpark, read it, judge it, then type or paste it into the Databricks notebook and narrate why. That is simultaneously the fastest path and a live demonstration of "you are the pilot" — which is the exact behaviour they say they are scoring.</p>
-  </div>
-
-  <h3 class="blk">Adding the MCP server, if you want path 2</h3>
-  <pre><span class="c"># Free Edition has no account console, so OAuth app registration is out.</span>
-<span class="c"># Create a PAT: Settings → Developer → Access tokens.</span>
-
-claude mcp add-json databricks-uc <span class="k">'{
-  "type": "http",
-  "url": "https://&lt;workspace&gt;.cloud.databricks.com/api/2.0/mcp/functions/workspace/retail_spike",
-  "headers": { "Authorization": "Bearer &lt;your-pat&gt;" }
-}'</span>
-
-<span class="c"># Genie space (once you have created one over the gold tables):</span>
-claude mcp add-json databricks-genie <span class="k">'{
-  "type": "http",
-  "url": "https://&lt;workspace&gt;.cloud.databricks.com/api/2.0/mcp/genie/&lt;space-id&gt;",
-  "headers": { "Authorization": "Bearer &lt;your-pat&gt;" }
-}'</span></pre>
-  <p class="sec-sub" style="margin-top:10px">Worth doing <em>after</em> the pipeline runs, not before. It is a multiplier on an existing setup, not a substitute for one — and it is a nice thing to mention in Round 2 when the topic of agents over governed data comes up.</p>
 </section>
 
-<!-- ========================= 4. RUNWAY ========================= -->
-<section id="runway">
-  <h2><span class="snum">04</span>Setup runway</h2>
-  <p class="sec-sub">Ordered by dependency, not importance. The first three unblock everything else and take under an hour together. Two items are blocked right now by things outside the repo.</p>
+<!-- ========================= 4. PIPELINE ========================= -->
+<section id="pipeline">
+  <h2><span class="snum">04</span>First pipeline: property data, end to end</h2>
+  <p class="sec-sub">Goal, verbatim: property data available to query in the SQL editor and notebooks, and a dashboard that proves the flow works. The fastest honest path uses <strong>the two CSVs already sitting in the volume</strong> — no new upload machinery, no source-repo changes. That's deliberate: prove the end-to-end slice first, then upgrade the feed (Section&nbsp;05) without touching what's proven.</p>
 
-  <div class="chk">
-    <div class="chk-row">
-      <input type="checkbox" id="c1">
-      <label class="chk-main" for="c1">Fix the machine's user lookup
-        <span class="chk-sub">macOS cannot resolve uid 501 to a username right now: <code>id -un</code> prints <code>501</code>, <code>brew</code>, <code>sudo</code> and local Spark all fail. <strong>Reboot.</strong> Until then <code>make test</code> cannot run.</span>
-      </label>
-      <span class="chk-when pill fail">blocker</span>
-    </div>
-    <div class="chk-row">
-      <input type="checkbox" id="c2">
-      <label class="chk-main" for="c2">Re-authenticate GitHub, push the repo public
-        <span class="chk-sub">Your <code>gh</code> token is expired. <code>gh auth login</code>, then <code>gh repo create nmp-dsci/databricks-spike --public --source=. --push</code>. Portfolio value on top of backup.</span>
-      </label>
-      <span class="chk-when pill fail">blocker</span>
-    </div>
-    <div class="chk-row">
-      <input type="checkbox" id="c3">
-      <label class="chk-main" for="c3">Sign up for Databricks Free Edition
-        <span class="chk-sub"><a href="https://www.databricks.com/learn/free-edition">databricks.com/learn/free-edition</a>. Verify with LinkedIn afterwards — it raises several of the resource caps. Note the workspace URL.</span>
-      </label>
-      <span class="chk-when pill amber">day 1</span>
-    </div>
-    <div class="chk-row">
-      <input type="checkbox" id="c4">
-      <label class="chk-main" for="c4">Install the CLI and authenticate
-        <span class="chk-sub"><code>make install</code> then <code>make auth</code>. The auth script tries OAuth first and drops to a personal access token if Free Edition refuses it — either way you end up with a working profile.</span>
-      </label>
-      <span class="chk-when pill amber">day 1</span>
-    </div>
-    <div class="chk-row">
-      <input type="checkbox" id="c5">
-      <label class="chk-main" for="c5">Start the warehouse, capture its id
-        <span class="chk-sub">SQL Warehouses → Serverless Starter → Connection details. Put the id in <code>databricks.yml</code> under <code>variables.warehouse_id.default</code>. The dashboard will not deploy without it.</span>
-      </label>
-      <span class="chk-when pill amber">day 1</span>
-    </div>
-    <div class="chk-row">
-      <input type="checkbox" id="c6">
-      <label class="chk-main" for="c6">First full deploy and run
-        <span class="chk-sub"><code>make ship</code>. Expect to fix something — most likely the dashboard JSON or an Auto Loader option. That debugging session is itself good preparation.</span>
-      </label>
-      <span class="chk-when pill amber">day 1</span>
-    </div>
-    <div class="chk-row">
-      <input type="checkbox" id="c7">
-      <label class="chk-main" for="c7">Polish the dashboard in the UI, pull it back
-        <span class="chk-sub">Add a country filter widget, fix any layout the JSON got wrong, then <code>make pull-dashboard</code> and commit. Proves the round-trip works before you need it under time pressure.</span>
-      </label>
-      <span class="chk-when pill">day 2</span>
-    </div>
-    <div class="chk-row">
-      <input type="checkbox" id="c8">
-      <label class="chk-main" for="c8">Create a Genie space over the gold tables
-        <span class="chk-sub">The <code>COMMENT</code>s in notebook 03 exist for exactly this. Ask it three business questions. This is the single highest-impact 15 minutes for the Round 4 demo.</span>
-      </label>
-      <span class="chk-when pill">day 2</span>
-    </div>
-    <div class="chk-row">
-      <input type="checkbox" id="c9">
-      <label class="chk-main" for="c9">Rehearse a cold rebuild, timed
-        <span class="chk-sub"><code>make destroy</code>, then <code>make ship</code> from scratch with a stopwatch. You need to know this number before Round 4, because it is your recovery budget when something breaks mid-build.</span>
-      </label>
-      <span class="chk-when pill">day 3</span>
-    </div>
-    <div class="chk-row">
-      <input type="checkbox" id="c10">
-      <label class="chk-main" for="c10">Optional: wire the MCP server
-        <span class="chk-sub">Section 03, path 2. Only worth it once everything above is green.</span>
-      </label>
-      <span class="chk-when pill grey">later</span>
-    </div>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart TD
+  V[("Volume: propertyiq/<br/>nswgov_df.csv · rentboard_df.csv<br/>already uploaded, 6.42M rows")]
+  B["<b>bronze_sales · bronze_rent</b><br/>Auto Loader csv, all-STRING schema<br/>append-only + _source_file, _ingested_at"]
+  S["<b>silver_sales · silver_rent</b><br/>typed · dates repaired · postcodes fixed<br/>house/unit derived · bad rows KEPT + flagged"]
+  G1["<b>gold_property_sales</b><br/>median price · postcode × type × month"]
+  G2["<b>gold_property_rent</b><br/>median rent · postcode × type × month"]
+  G3["<b>gold_property_yield</b><br/>52 × rent / price, n ≥ 5 both sides"]
+  Q["SQL editor · notebooks · Genie"]
+  D["AI/BI dashboard<br/>price + rent + yield + data quality"]
+
+  V --> B --> S
+  S --> G1 --> Q
+  S --> G2 --> Q
+  G1 --> G3
+  G2 --> G3
+  G3 --> D
+  G1 --> D
+  G2 --> D
+    </pre>
+    <p class="dia-cap">The same medallion shape the repo already implements for retail — swap the source, port real rules, keep the discipline: logic in <code>transforms.py</code> with tests, notebooks orchestrate.</p>
   </div>
-</section>
 
-<!-- ========================= 5. ROUNDS ========================= -->
-<section id="rounds">
-  <h2><span class="snum">05</span>Per-round game plan</h2>
-  <p class="sec-sub">What this repo is <em>for</em> changes at every stage. In Round 2 it is a memory aid you never open. In Round 4 it is the product.</p>
-
-  <div class="tl">
-
-    <div class="tl-item">
-      <div class="tl-dot">02</div>
-      <div class="tl-card">
-        <h4>Design &amp; Architecture <span class="pill grey">60 min</span> <span class="pill">1–2 SAs as stakeholders</span></h4>
-        <div class="tl-meta">mode · nothing shared · repo is rehearsal only</div>
-        <p>You are not coding. The value of the repo here is that every architectural claim you make is one you have actually implemented, so the follow-up question never catches you out. When they ask why you would not just filter bad rows at ingest, you have a real answer and a real table.</p>
-        <p><strong>Rehearse three trade-offs out loud</strong>, all of which live in the code: bronze keeps everything so silver can be rebuilt; silver flags rather than drops so one table serves both dashboards; gold is pre-aggregated because a 2X-Small warehouse should never scan row-level data for BI.</p>
-        <div class="tip"><b>Their stated #1 criterion is "think out loud."</b> Start with discovery questions, not a diagram. Their listed pitfall is literally "jumping the gun" — building before defining assumptions.</div>
-      </div>
+  <h3 class="blk">The silver rules come from your dbt project, not from guesswork</h3>
+  <p class="sec-sub">The dbt pipeline in <code>data-qa-agent</code> already cleaned exactly this data for Postgres. Silver ports its staging models rule-for-rule — each as a pure function with a local test:</p>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card">
+      <h4>Sales (from <code>stg_sales</code>)</h4>
+      <ul class="list-clean">
+        <li><code>contract_dt</code> "20160414.0" → strip ".0" → date; keep only 8-digit, year ≥ 2010</li>
+        <li><code>postcode</code> "2327.0" → "2327" (stays string)</li>
+        <li>house/unit from <code>strata_no</code> empty-check</li>
+        <li>price must be digits, $10k–$8M — the $10k floor removes non-arms-length family transfers</li>
+        <li><code>RESIDENCE</code> only, non-blank locality; area H→×10,000 to sqm, then banded</li>
+      </ul>
     </div>
-
-    <div class="tl-item">
-      <div class="tl-dot">03</div>
-      <div class="tl-card">
-        <h4>Coding / "vibe" pairing <span class="pill grey">60 min</span> <span class="pill amber">full screen share</span> <span class="pill amber">Free Edition</span></h4>
-        <div class="tl-meta">mode · Databricks-native, this terminal as scratchpad</div>
-        <p>Work in the Databricks notebook UI. Use the Assistant. Do <strong>not</strong> run a local deploy loop on camera — it reads as avoiding their product, and the round is explicitly about problem solving with AI tooling on the platform.</p>
-        <p>Have this repo <strong>already deployed</strong> before you join. Then a synthetic dataset, a Volume, working transform patterns and a warehouse all exist. When they hand you the data-generation prompt you are adapting a working pipeline, not starting at an empty cell.</p>
-        <div class="tip"><b>The scored behaviour is catching the AI being wrong.</b> Ask the Assistant for something you know it will get slightly off — a window function, or a join that will explode row counts — then say what is wrong and fix it. That single moment is what they are looking for.</div>
-      </div>
+    <div class="card">
+      <h4>Rent (from <code>stg_rent</code>) + the join</h4>
+      <ul class="list-clean">
+        <li>ISO date parse; H/T → house, else unit — mirrored vocab so sales↔rent join works</li>
+        <li>bedrooms digit-guarded, banded unknown/0–4/5+; rent &gt; 0</li>
+        <li>yield = ratio of averages (never average of ratios), joined on postcode+type+month, n ≥ 5 both sides, additive legs kept</li>
+        <li>divergence from dbt: silver <strong>flags</strong> bad rows (<code>_quality</code> reasons) instead of dropping; gold applies the filter — quality dashboard and price dashboard read one table</li>
+      </ul>
     </div>
-
-    <div class="tl-item">
-      <div class="tl-dot">04</div>
-      <div class="tl-card">
-        <h4>Build, Demo, Pitch <span class="pill grey">4 h build</span> <span class="pill grey">60 min panel</span> <span class="pill fail">75% customer skills</span></h4>
-        <div class="tl-meta">mode · hybrid, and this is where the repo pays for itself</div>
-        <p>The prompt lands 24 hours ahead; the build is capped at four hours. Their own breakdown gives only <strong>1.5 hours to the technical build</strong>. You cannot spend that hour and a half fighting setup — which is precisely what everything above buys back.</p>
-        <p>Plan: rename the schema, swap the synthetic generator for whatever vertical the prompt names, adjust the gold aggregates, redeploy, repoint the dashboard. Ninety minutes is comfortable if the scaffold already runs, and impossible if it does not.</p>
-        <div class="tip"><b>Demo the dashboard and Genie, not the notebooks.</b> The panel plays a Business Leader, a CTO and a VP of Engineering. Two of those three do not want to see code. They score the story; the build is explicitly called "a prop", and it "does not all have to work behind the scenes."</div>
-      </div>
-    </div>
-
   </div>
 
   <div class="callout star">
-    <h4>◆ One asset worth building that is not in the repo yet</h4>
-    <p>A <strong>one-slide architecture diagram</strong> of what you built, in the customer's language: sources → landing → bronze/silver/gold → dashboard + Genie, with the trade-off annotations. It serves Round 2 as a whiteboard reference and Round 4 as the opening slide. Say the word and I will generate it from the pipeline as it stands.</p>
+    <h4>◆ Definition of done for the slice</h4>
+    <p>① <code>make ship</code> runs the job green. ② In the SQL editor: <code>SELECT * FROM workspace.propertyiq.gold_property_yield WHERE postcode = '2000'</code> returns monthly yields. ③ The dashboard shows median price, median rent, yield by postcode over time, plus a quality panel of flagged-row reasons. ④ <code>make destroy && make ship</code> rebuilds it all — proof the whole thing is code.</p>
   </div>
 </section>
 
-<!-- ========================= 6. DECIDE ========================= -->
+<!-- ========================= 5. CONTRACT ========================= -->
+<section id="contract">
+  <h2><span class="snum">05</span>The iteration after: updates-only Parquet feed</h2>
+  <p class="sec-sub">The CSVs in the volume are stale legacy exports — fine for proving the slice, wrong as the permanent feed. The upgrade: one new <code>publish databricks</code> command in <code>propertyiq_getdata</code> sends <em>only new or changed</em> partitions as Parquet. Nothing downstream changes except bronze's input path.</p>
+
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card">
+      <h4>The contract</h4>
+      <p>Source already writes 754 immutable weekly sales partitions + 114 rent months, each sha256-manifested. Publish diffs the manifest against a volume listing and uploads what's missing as <span class="mono">landing/sales/period=YYYYMMDD_&lt;sha8&gt;.parquet</span> and <span class="mono">landing/lodgements/month=YYYY-MM_&lt;sha8&gt;.parquet</span> — zstd, all columns STRING (silver owns typing), no state file: <strong>the filename encodes the content, so diff-by-name is diff-by-content</strong>.</p>
+    </div>
+    <div class="card">
+      <h4>Why hash-named, append-only files</h4>
+      <p>Rentboard rewrites its trailing month each run — as a new hash-named file, Auto Loader's exactly-once tracking ingests it naturally and silver keeps the newest version per month. The same rule future-proofs sales restatements. One invariant everywhere: <em>landing is append-only; silver resolves versions</em>.</p>
+      <p class="one">Steady state ≈ 1–2 MB/week. Bootstrap = all 868 partitions, ~150–250 MB of Parquet, one command. Source changes: <code>uv add pyarrow databricks-sdk</code> + ~100-line sink module.</p>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <h4>⚑ Two upstream gaps to know about (both fixable in propertyiq_getdata, neither blocks v1)</h4>
+    <p><strong>Restatements:</strong> the source discards VG yearly-archive corrections below its watermark — the lake forwards whatever it gets, but can't see what the source never processes. <strong>Stale current month:</strong> a cached partial rent <code>.xlsx</code> is never re-fetched until deleted by hand. Flagged so "no updates seen" is never mistaken for "no updates exist".</p>
+  </div>
+</section>
+
+<!-- ========================= 6. RUNWAY ========================= -->
+<section id="runway">
+  <h2><span class="snum">06</span>Runway</h2>
+  <p class="sec-sub">Ordered by dependency. Steps 1–5 produce the end-to-end slice using what's already uploaded; 6–8 upgrade the feed to updates-only.</p>
+
+  <div class="chk">
+    <div class="chk-row">
+      <input type="checkbox" id="r1" checked>
+      <label class="chk-main" for="r1"><s>Commit the pending fixes</s>
+        <span class="chk-sub"><code>databricks.yml</code>, the two test files, this page. Clean slate before the build.</span>
+      </label>
+      <span class="chk-when pill">done</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="r2" checked>
+      <label class="chk-main" for="r2"><s>Repoint the bundle at propertyiq</s>
+        <span class="chk-sub">Schema variable <code>retail_spike</code> → <code>propertyiq</code>; bronze notebooks fork into sales/rent reading the volume CSVs (Auto Loader, all-STRING declared schema); job graph gains the second source.</span>
+      </label>
+      <span class="chk-when pill amber">next</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="r3" checked>
+      <label class="chk-main" for="r3"><s>Port silver rules into transforms.py, with tests</s>
+        <span class="chk-sub">The Section 04 rules, one pure function each, fixtures covering both sales encoding eras (pre-2024 float-damaged, post-2024 clean). Biggest single step; entirely local until green.</span>
+      </label>
+      <span class="chk-when pill amber">next</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="r4" checked>
+      <label class="chk-main" for="r4"><s>Gold marts + first <code>make ship</code></s>
+        <span class="chk-sub">Three gold tables + post-load sanity checks (grain unique, ≥10 postcodes covered, yield within 0.3–25%) as a failing-loudly job task. Then the first real deploy and run.</span>
+      </label>
+      <span class="chk-when pill">then</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="r5" checked>
+      <label class="chk-main" for="r5"><s>Dashboard + SQL-editor proof</s>
+        <span class="chk-sub">Repoint the dashboard-as-code at the property marts (price, rent, yield, quality panel), polish in the UI, <code>make pull-dashboard</code>. Run the definition-of-done queries. <strong>End-to-end proven here.</strong></span>
+      </label>
+      <span class="chk-when pill">then</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="r6">
+      <label class="chk-main" for="r6">Publish command in propertyiq_getdata
+        <span class="chk-sub"><code>uv add pyarrow databricks-sdk</code>; <code>sinks/databricks.py</code>; bootstrap all 868 partitions into <code>landing/</code>; swap bronze's input path from the monolith CSVs to <code>landing/</code>.</span>
+      </label>
+      <span class="chk-when pill grey">upgrade</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="r7">
+      <label class="chk-main" for="r7">Genie space + UC comments from the dbt yml
+        <span class="chk-sub">The dbt column descriptions were written as LLM prompts for data-qa-agent's NL2SQL — port them verbatim as UC <code>COMMENT</code>s and Genie inherits a year of grounding for free.</span>
+      </label>
+      <span class="chk-when pill grey">upgrade</span>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="r8">
+      <label class="chk-main" for="r8">Cleanup + steady state
+        <span class="chk-sub">Delete the monolith CSVs from the volume; retire the synthetic retail flow; reword the CLAUDE.md "synthetic only" rule to permit named public open data; routine becomes <code>update_data_and_push.sh</code> → <code>publish</code> → <code>make run</code>.</span>
+      </label>
+      <span class="chk-when pill grey">last</span>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 7. DECIDE ========================= -->
 <section id="decide">
-  <h2><span class="snum">06</span>Two things to decide</h2>
-  <p class="sec-sub">The first is on the recruiter's open-actions list and blocks scheduling. The second changes what I build next. Pick and queue; both go back to me as prompts.</p>
+  <h2><span class="snum">07</span>Two decisions</h2>
+  <p class="sec-sub">Both reversible; each changes what I start building. Queue an answer and I begin.</p>
 
   <div class="grid g2" style="margin-top:16px">
 
-    <form class="dform" data-lavish-question="spike" onsubmit="event.preventDefault();var c=new FormData(event.currentTarget).get('spike');if(!c)return;window.lavish.queuePrompt('For Interview 2 I am declaring the technical spike: '+c+'. Help me prepare depth in that area and adjust the repo to back it up.',{tag:'choice',text:'Spike: '+c,element:event.currentTarget,data:{question:'spike',answer:c}});var s=event.currentTarget.querySelector('.sent');s.textContent='queued ✓';">
+    <form class="dform" data-lavish-question="first" onsubmit="event.preventDefault();var c=new FormData(event.currentTarget).get('first');if(!c)return;window.lavish.queuePrompt('PropertyIQ build order decision: '+c,{tag:'choice',text:'First: '+c,element:event.currentTarget,data:{question:'first',answer:c}});var s=event.currentTarget.querySelector('.sent');s.textContent='queued ✓';">
       <fieldset>
-        <legend>Interview 2 technical spike</legend>
-        <p class="q-help">The recruiter needs this before the coordinator can schedule. You go deep in 1–3 areas; this declares the first.</p>
-        <label class="dopt"><input type="radio" name="spike" value="Data Engineering / ELT" checked>
-          <span class="dtxt"><b>Data Engineering / ELT</b><span>Recommended. Matches your Atlassian Databricks/PySpark/Airflow years, matches the example scenario they gave (global data ingestion), and this repo <em>is</em> the artifact. AI/ML then arrives as upside rather than as your only card.</span></span></label>
-        <label class="dopt"><input type="radio" name="spike" value="AI/ML">
-          <span class="dtxt"><b>AI / ML</b><span>Your strongest recent work — six agentic systems, eval harnesses, MLOps. Higher ceiling, but you would be arguing MLOps depth to an SA panel whose default scenario is ingestion.</span></span></label>
-        <label class="dopt"><input type="radio" name="spike" value="Data Modeling &amp; Analytics">
-          <span class="dtxt"><b>Data Modeling &amp; Analytics</b><span>Modelling, aggregation, performance tuning, serving. Safe and well covered by the gold layer, but the least differentiating of the three.</span></span></label>
-        <label class="dopt"><input type="radio" name="spike" value="Other: GenAI systems on the Lakehouse">
-          <span class="dtxt"><b>Other — GenAI on the Lakehouse</b><span>Frame your own: governed NL→SQL, evaluation-driven agents, Genie and Agent Bricks. Highest differentiation, highest risk if the interviewer wants classic DE.</span></span></label>
+        <legend>Start where?</legend>
+        <p class="q-help">Runway steps 1–5 (slice from the uploaded CSVs) versus jumping straight to the parquet feed.</p>
+        <label class="dopt"><input type="radio" name="first" value="end-to-end slice first from the CSVs already in the volume (runway 1-5), upgrade the feed after (recommended)" checked>
+          <span class="dtxt"><b>End-to-end slice first</b><span>Recommended, and matches your stated goal: queryable tables + working dashboard fastest, no new upload machinery. The feed upgrade then swaps one input path under a proven pipeline.</span></span></label>
+        <label class="dopt"><input type="radio" name="first" value="publish command and parquet bootstrap first, then build the pipeline against real landing data">
+          <span class="dtxt"><b>Parquet feed first</b><span>The contract becomes real before anything reads it; downstream develops against true partitioned landing data. Slower to the first visible dashboard.</span></span></label>
       </fieldset>
       <div style="margin-top:12px"><button class="btn" type="submit">Queue this answer</button><span class="sent"></span></div>
     </form>
 
-    <form class="dform" data-lavish-question="next" onsubmit="event.preventDefault();var c=new FormData(event.currentTarget).get('next');if(!c)return;window.lavish.queuePrompt('Next thing to build for the Databricks prep: '+c,{tag:'choice',text:'Next: '+c,element:event.currentTarget,data:{question:'next',answer:c}});var s=event.currentTarget.querySelector('.sent');s.textContent='queued ✓';">
+    <form class="dform" data-lavish-question="engine" onsubmit="event.preventDefault();var c=new FormData(event.currentTarget).get('engine');if(!c)return;window.lavish.queuePrompt('PropertyIQ transform engine decision: '+c+'. Proceed on that basis.',{tag:'choice',text:'Engine: '+c,element:event.currentTarget,data:{question:'engine',answer:c}});var s=event.currentTarget.querySelector('.sent');s.textContent='queued ✓';">
       <fieldset>
-        <legend>What should I build next?</legend>
-        <p class="q-help">Once you have a workspace and the first deploy is green, these are the highest-value additions in order of my preference.</p>
-        <label class="dopt"><input type="radio" name="next" value="architecture diagram + Round 2 talk track" checked>
-          <span class="dtxt"><b>Architecture diagram + talk track</b><span>The one-slide customer-language diagram from Section 05, plus a scripted set of trade-off answers to rehearse aloud. Serves rounds 2 and 4.</span></span></label>
-        <label class="dopt"><input type="radio" name="next" value="a Round 4 demo skeleton I can repoint at any vertical in 90 minutes">
-          <span class="dtxt"><b>Round 4 demo skeleton</b><span>Parameterise the generator so swapping retail for insurance, telco or logistics is a config change, not a rewrite. Directly buys back build time on the day.</span></span></label>
-        <label class="dopt"><input type="radio" name="next" value="a Lakeflow Declarative Pipelines version of the medallion flow">
-          <span class="dtxt"><b>A Lakeflow pipeline variant</b><span>Rebuild the same medallion flow declaratively, with expectations instead of hand-rolled quality flags. Lets you compare the two approaches out loud — a strong DE-spike move.</span></span></label>
-        <label class="dopt"><input type="radio" name="next" value="Databricks MCP wiring plus a Genie space over the gold tables">
-          <span class="dtxt"><b>MCP + Genie space</b><span>Path 2 from Section 03, plus the Genie space. Makes the "agents over governed data" story demonstrable rather than asserted.</span></span></label>
+        <legend>Where do the transform rules live?</legend>
+        <p class="q-help">The dbt SQL must be expressed somewhere on the Databricks side.</p>
+        <label class="dopt"><input type="radio" name="engine" value="PySpark port into transforms.py (recommended)" checked>
+          <span class="dtxt"><b>PySpark port into <code>transforms.py</code></b><span>Recommended: keeps the tested pure-function pattern and the 13s local loop; serverless-native; every rule explainable. Cost: rules exist twice until the Postgres side retires.</span></span></label>
+        <label class="dopt"><input type="radio" name="engine" value="dbt-databricks adapter reusing the existing dbt project">
+          <span class="dtxt"><b>dbt-databricks adapter</b><span>Reuse the models nearly verbatim; one rule set. Cost: second toolchain here, dialect fixes anyway, weaker local testing.</span></span></label>
+        <label class="dopt"><input type="radio" name="engine" value="Lakeflow Declarative Pipeline with expectations">
+          <span class="dtxt"><b>Lakeflow Declarative Pipeline</b><span>Expectations instead of hand-rolled flags; strongest platform-native story; largest rewrite, one active pipeline on Free Edition.</span></span></label>
       </fieldset>
       <div style="margin-top:12px"><button class="btn" type="submit">Queue this answer</button><span class="sent"></span></div>
     </form>
@@ -657,62 +509,43 @@ claude mcp add-json databricks-genie <span class="k">'{
   </div>
 </section>
 
-<!-- ========================= 7. RISKS ========================= -->
+<!-- ========================= 8. RISKS ========================= -->
 <section id="risks">
-  <h2><span class="snum">07</span>Risks and open questions</h2>
-  <p class="sec-sub">Ordered by how much they would hurt if ignored until the day of an interview.</p>
-
-  <div class="callout red">
-    <h4>⚠ Your Mac cannot resolve its own user account</h4>
-    <p><code>id -un</code> returns <code>501</code> instead of <code>nathanphillips</code>, and <code>ls -l</code> shows numeric owners. Consequences seen directly: <code>brew install</code> crashes, <code>sudo</code> reports "you do not exist in the passwd database", and Spark dies with a Kerberos login error that has nothing to do with Kerberos. This is macOS DirectoryServices in a bad state — <strong>a reboot should clear it</strong>. Until then <code>make test</code> cannot run, so the unit tests in this repo are written but unproven. Everything else — the CLI, bundles, deploys, the workspace — is unaffected.</p>
-  </div>
-
+  <h2><span class="snum">08</span>Risks worth naming</h2>
   <div class="grid g2" style="margin-top:16px">
+    <div class="card">
+      <div class="tag-row"><span class="pill amber">medium</span></div>
+      <h4>Sales data has two permanent encoding eras</h4>
+      <p>Partitions before 2024 carry pandas float damage (<code>2327.0</code>, <code>20150416.0</code>); later ones are clean DAT strings — and the damaged years survive nowhere else, so the era-absorbing rules are load-bearing forever. Both eras go in the test fixtures.</p>
+    </div>
     <div class="card">
       <div class="tag-row"><span class="pill amber">medium</span></div>
       <h4>Dashboard JSON may need UI repair</h4>
-      <p>The <code>.lvdash.json</code> widget-spec schema is only partly documented publicly. The file is internally consistent and uses documented widget types, but a spec version could be off.</p>
-      <p class="one">Mitigation is already in place: deploy, fix visually, <code>make pull-dashboard</code>. Budget 20 minutes the first time, and do it before Round 4, not during it.</p>
-    </div>
-    <div class="card">
-      <div class="tag-row"><span class="pill amber">medium</span></div>
-      <h4>OAuth on Free Edition is inconsistent</h4>
-      <p>Community reports disagree on whether <code>databricks auth login</code> completes against a Free Edition host. <code>scripts/auth.sh</code> tries OAuth and falls back to a PAT prompt, so either way you get a working profile.</p>
-      <p class="one">If you end up on a PAT: it is workspace-scoped and auto-revoked after 90 days of disuse. Fine for this, wrong for anything real — worth saying if asked.</p>
+      <p>The widget-spec schema is only partly documented; the property repoint may need one round of visual fixes. Mitigation unchanged: deploy, fix in UI, <code>make pull-dashboard</code>. Budget 20 minutes.</p>
     </div>
     <div class="card">
       <div class="tag-row"><span class="pill">low</span></div>
-      <h4>Free Edition quotas are tight</h4>
-      <p>One SQL warehouse, one active pipeline per type, 5 concurrent job tasks, apps auto-stop after 24 hours. The repo already fits inside all of these, but a Round 4 prompt asking for streaming plus batch plus an app could bump the ceiling.</p>
-      <p class="one">LinkedIn verification raises several caps. Do it on day 1, not on the day.</p>
+      <h4>Free Edition fit</h4>
+      <p>Push-based landing needs no egress; ~250&nbsp;MB Parquet is trivial; job graph stays under 5 concurrent tasks; one 2X-Small warehouse serves SQL editor, dashboard and Genie. Public open data (NSW VG, Rental Bonds, ABS) is compatible with non-commercial terms.</p>
     </div>
     <div class="card">
       <div class="tag-row"><span class="pill">low</span></div>
-      <h4>Non-commercial, public data only</h4>
-      <p>Free Edition terms are non-commercial, and the interview brief forbids proprietary or confidential data outright. The repo generates everything in-workspace, which also sidesteps the restricted-egress limit.</p>
-      <p class="one">Two constraints, one design decision. Worth naming explicitly if anyone asks where the data came from.</p>
+      <h4>CLAUDE.md contradicts this work</h4>
+      <p>The repo rule says "no real data, synthetic only" — written for interview-brief reasons that don't apply to public open datasets. Until reworded (runway step 8), every future session will trip over it.</p>
     </div>
   </div>
-
-  <h3 class="blk">Still open</h3>
-  <ul class="list-clean amber">
-    <li><strong>Interview dates.</strong> The coordinator schedules rounds 2 and 3 and has not come back yet. The runway above is three working days; confirm you have that much lead time before Round 3.</li>
-    <li><strong>The Setup &amp; Environment Guide for Round 4</strong> is a Google Doc linked in the recruiter pack. It may specify tools beyond the CLI. Worth opening early — it is on their action list and I cannot read it from here.</li>
-    <li><strong>Does the panel want the dashboard shared, or the notebook?</strong> The hiring manager's 15-minute prep call before Round 4 is the place to ask. Their guidance says the demo is a prop, which suggests dashboard-first, but confirming costs nothing.</li>
-  </ul>
 </section>
 
 </div>
 
 <footer>
   <div class="foot-inner">
-    <p><strong>Sources.</strong> Recruiter interview pack (<code>ai-engineer-fit/applications/databrick-sa-2608/</code>), the repo as committed, and Databricks documentation current as of August 2026.</p>
+    <p><strong>Sources.</strong> The repo as validated today (bundle <code>--strict</code> clean, 15/15 tests); live workspace queries over <code>workspace.propertyiq</code>; surveyed 13&nbsp;Aug: <code>propertyiq_getdata</code> (sources/nswgov.py, sources/rentboard.py, core/manifest.py) and <code>data-qa-agent</code> (services/data-pipeline/dbt models, tests, yml docs). Prior versions of this page: git history.</p>
     <p class="src">
-      docs.databricks.com/aws/en/getting-started/free-edition-limitations ·
-      docs.databricks.com/aws/en/dev-tools/bundles/resources ·
-      docs.databricks.com/aws/en/agents/mcp-tools/connect-clients ·
-      docs.databricks.com/aws/en/repos/ ·
-      databricks.com/learn/free-edition
+      valuation.property.nsw.gov.au/embed/propertySalesInformation ·
+      nsw.gov.au/housing-and-construction/rental-forms-surveys-and-data/rental-bond-data ·
+      docs.databricks.com/aws/en/ingestion/cloud-object-storage/auto-loader ·
+      docs.databricks.com/aws/en/getting-started/free-edition-limitations
     </p>
   </div>
 </footer>
