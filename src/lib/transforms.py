@@ -125,6 +125,13 @@ def clean_sales(df: DataFrame) -> DataFrame:
     # collides. Hash the business key, then number the rows *within* each hash
     # deterministically — unique unconditionally, and stable across rebuilds,
     # unlike dbt's global row_number().
+    #
+    # Deliberately no dedup or aggregation here, matching dbt: split
+    # settlements stay as separate rows, each with its own sale_id. Collapsing
+    # part-payments to one row per property was considered and rejected — it
+    # would skew avg/median away from what the dbt marts report, since the
+    # real aggregation to postcode/suburb/type/area_band/zoning/month happens
+    # in gold, not here.
     key_hash = F.sha2(
         F.concat_ws(
             "|",
