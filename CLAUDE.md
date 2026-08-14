@@ -1,4 +1,4 @@
-# CLAUDE.md — databricks-spike
+# CLAUDE.md — databricks-propertyiq
 
 Local-first Databricks development. Code is authored here and deployed to a
 **Databricks Free Edition** workspace with Asset Bundles. Read `README.md` for

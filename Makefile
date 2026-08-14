@@ -54,7 +54,7 @@ ship: test deploy run ## test -> deploy -> run, the one command for the inner lo
 
 .PHONY: sync
 sync: ## Live-sync this folder to the workspace on every save (leave running)
-	@$(DB) sync --watch . "/Workspace/Users/$$($(DB) current-user me | jq -r .userName)/live/databricks-spike"
+	@$(DB) sync --watch . "/Workspace/Users/$$($(DB) current-user me | jq -r .userName)/live/databricks-propertyiq"
 
 .PHONY: sql
 sql: ## Run a .sql file on the serverless warehouse. Usage: make sql FILE=src/sql/01_explore.sql

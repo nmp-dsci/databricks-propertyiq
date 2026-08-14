@@ -150,7 +150,7 @@ wheels = [
 ]
 
 [[package]]
-name = "databricks-spike"
+name = "databricks-propertyiq"
 version = "0.1.0"
 source = { virtual = "." }
 

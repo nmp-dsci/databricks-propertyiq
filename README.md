@@ -1,4 +1,4 @@
-# databricks-spike
+# databricks-propertyiq
 
 Author Databricks notebooks, SQL and dashboards **here** — in a normal git repo,
 with a normal editor and a coding agent — and have them render and run **there**,

@@ -67,7 +67,7 @@ def spark():
 
     session = (
         SparkSession.builder.master("local[2]")
-        .appName("databricks-spike-tests")
+        .appName("databricks-propertyiq-tests")
         # These are 10-row DataFrames, not a job — 200 shuffle partitions would
         # cost more in task overhead than the whole suite.
         .config("spark.sql.shuffle.partitions", "2")

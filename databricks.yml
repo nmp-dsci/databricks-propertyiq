@@ -1,5 +1,5 @@
 bundle:
-  name: databricks-spike
+  name: databricks-propertyiq
 
 variables:
   catalog:
