@@ -1,0 +1,142 @@
+{
+  "version": 2,
+  "data_sources": {
+    "tables": [
+      {
+        "identifier": "workspace.propertyiq.gold_property_rent"
+      },
+      {
+        "identifier": "workspace.propertyiq.gold_property_sales"
+      },
+      {
+        "identifier": "workspace.propertyiq.gold_property_yield"
+      },
+      {
+        "identifier": "workspace.propertyiq.gold_quality_summary"
+      }
+    ]
+  },
+  "config": {
+    "sample_questions": [
+      {
+        "question": [
+          "Which postcodes had the most house sales last year?"
+        ],
+        "id": "38c767ba499e4559b4af0792e067f0c3"
+      },
+      {
+        "question": [
+          "How have average house sale prices in postcode 2077 moved since 2020?"
+        ],
+        "id": "72415c5d762342949735928754db49c2"
+      },
+      {
+        "question": [
+          "Compare average weekly rent for 2-bedroom versus 3-bedroom units in 2025"
+        ],
+        "id": "755394b4f72945a4aec75b58cfac26f5"
+      },
+      {
+        "question": [
+          "Which postcodes have the highest gross rental yield for units?"
+        ],
+        "id": "d34c177dee0a4bb6bb29e9db33a94c62"
+      }
+    ]
+  },
+  "instructions": {
+    "text_instructions": [
+      {
+        "content": [
+          "SCOPE. This data is NSW (Australia) residential property. Sales come from the Valuer General; rents come from Rental Bond Board lodgements. All money is AUD. Rent is always WEEKLY rent, never monthly.\n",
+          "\n",
+          "GRAIN. Every gold table is already aggregated to one row per month (the `month` column is the first day of that month, a DATE). There is no row-per-transaction table here, so never imply a single sale or a single tenancy — always speak in aggregates.\n",
+          "\n",
+          "COVERAGE. Sales run 2010-01 to 2026-10; rent runs only 2016-01 to 2026-05. When a question compares sales to rent, restrict to the overlapping window and say so. The most recent one or two months are usually partial and will look artificially low — mention this when a trend ends at the latest month.\n",
+          "\n",
+          "ADDITIVE LEGS — THIS IS THE MOST IMPORTANT RULE. Never average an average. `avg_sale_price`, `avg_weekly_rent` and `gross_yield_pct` are per-row ratios and are NOT additive. To aggregate across postcodes, months or types, sum the additive legs and divide at the end:\n",
+          "  average sale price  = SUM(total_sale_value) / SUM(n_sold)\n",
+          "  average weekly rent = SUM(total_weekly_rent) / SUM(n_rented)\n",
+          "  gross yield pct     = 52 * (SUM(total_weekly_rent)/SUM(n_rented)) / (SUM(total_sale_value)/SUM(n_sold)) * 100\n",
+          "Medians (`median_sale_price`, `median_weekly_rent`) are NOT additive and cannot be recombined at all — only ever read them for a single row, and if a question needs a median across buckets, say it is unavailable and offer the average instead.\n",
+          "\n",
+          "JOINING SALES TO RENT. Only ever join on postcode + property_type + month, all three. Never join on suburb: rent data has no suburb column. In practice, prefer `gold_property_yield`, which is that join already done correctly, over joining the two marts by hand.\n",
+          "\n",
+          "YIELD. `gross_yield_pct` is gross, not net — no costs, vacancy or fees are deducted. It is a ratio of averages (average rent over average price for the cell), not an average of per-property ratios. Cells with fewer than 5 sales or fewer than 5 bonds in the month are already excluded from the yield table as too thin to be meaningful. A typical Sydney gross yield is roughly 2-5%; anything above about 8% is far more likely to be thin data than a real bargain, so flag it rather than recommending it.\n",
+          "\n",
+          "THIN CELLS IN THE MARTS. `gold_property_sales` and `gold_property_rent` deliberately KEEP thin rows. When ranking postcodes, always apply a volume floor in the query (e.g. HAVING SUM(n_sold) >= 20) or the top of the ranking will be dominated by postcodes with a single expensive sale.\n",
+          "\n",
+          "COLUMN DOMAINS. `property_type` is exactly 'house' or 'unit' (lowercase). `bedroom_band` is '0','1','2','3','4','5+','unknown' and exists ONLY on the rent table. `area_band` and `zoning` exist ONLY on the sales table. Postcodes are strings, so quote them ('2077', not 2077).\n",
+          "\n",
+          "QUALITY. `gold_quality_summary` counts rows per month per rejection reason per dataset ('nsw_sales' or 'nsw_rent'); valid rows appear under reason = 'ok'. Use it only for questions about data quality or completeness, never to answer a property-market question. The marts already exclude failing rows, so quality counts must never be mixed into price or rent figures.\n",
+          "\n",
+          "TONE. This is public open government data about property markets in aggregate. Report what the numbers show. Do not give investment advice or recommend that anyone buy, sell or hold."
+        ],
+        "id": "a62d643f371c49e5a5bad018dee204f4"
+      }
+    ],
+    "example_question_sqls": [
+      {
+        "question": [
+          "How have average house sale prices in postcode 2077 moved since 2020?"
+        ],
+        "sql": [
+          "-- Roll the mart's finer buckets (suburb / area_band / zoning) up to one row per month.\n",
+          "SELECT\n",
+          "  `month`,\n",
+          "  SUM(`n_sold`) AS `sales`,\n",
+          "  SUM(`total_sale_value`) / SUM(`n_sold`) AS `avg_sale_price`\n",
+          "FROM `workspace`.`propertyiq`.`gold_property_sales`\n",
+          "WHERE `postcode` = '2077'\n",
+          "  AND `property_type` = 'house'\n",
+          "  AND `month` >= DATE'2020-01-01'\n",
+          "GROUP BY `month`\n",
+          "ORDER BY `month`;"
+        ],
+        "id": "4954f5a6639b4eeeba788694638638f7"
+      },
+      {
+        "question": [
+          "Compare average weekly rent by bedroom count for units in 2025"
+        ],
+        "sql": [
+          "SELECT\n",
+          "  `bedroom_band`,\n",
+          "  SUM(`n_rented`) AS `bonds`,\n",
+          "  SUM(`total_weekly_rent`) / SUM(`n_rented`) AS `avg_weekly_rent`\n",
+          "FROM `workspace`.`propertyiq`.`gold_property_rent`\n",
+          "WHERE `property_type` = 'unit'\n",
+          "  AND `month` >= DATE'2025-01-01' AND `month` < DATE'2026-01-01'\n",
+          "  AND `bedroom_band` <> 'unknown'\n",
+          "GROUP BY `bedroom_band`\n",
+          "ORDER BY `bedroom_band`;"
+        ],
+        "id": "7dbd11eb412e4254926dd07f255dda62"
+      },
+      {
+        "question": [
+          "Which postcodes have the highest gross rental yield for units?"
+        ],
+        "sql": [
+          "-- Sum the additive legs across months, then recompute the ratio.\n",
+          "SELECT\n",
+          "  `postcode`,\n",
+          "  SUM(`n_sold`)   AS `sales`,\n",
+          "  SUM(`n_rented`) AS `bonds`,\n",
+          "  SUM(`total_sale_value`)  / SUM(`n_sold`)   AS `avg_sale_price`,\n",
+          "  SUM(`total_weekly_rent`) / SUM(`n_rented`) AS `avg_weekly_rent`,\n",
+          "  52 * (SUM(`total_weekly_rent`) / SUM(`n_rented`))\n",
+          "     / (SUM(`total_sale_value`)  / SUM(`n_sold`)) * 100 AS `gross_yield_pct`\n",
+          "FROM `workspace`.`propertyiq`.`gold_property_yield`\n",
+          "WHERE `property_type` = 'unit'\n",
+          "  AND `month` >= add_months(current_date(), -12)\n",
+          "GROUP BY `postcode`\n",
+          "HAVING SUM(`n_sold`) >= 20 AND SUM(`n_rented`) >= 20\n",
+          "ORDER BY `gross_yield_pct` DESC\n",
+          "LIMIT 20;"
+        ],
+        "id": "f16c2a915b734648ac04085d1aefdea3"
+      }
+    ]
+  }
+}
