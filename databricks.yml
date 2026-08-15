@@ -11,7 +11,8 @@ variables:
   volume:
     description: >-
       UC volume (inside the schema) holding the landed source files —
-      today the two monolith CSVs, later the updates-only Parquet feed.
+      the updates-only Parquet feed published under landing/sales/ and
+      landing/lodgements/ by the sibling propertyiq_getdata project.
     default: propertyiq
   warehouse_id:
     description: >-
@@ -46,3 +47,13 @@ targets:
     permissions:
       - level: CAN_MANAGE
         user_name: ${workspace.current_user.userName}
+    resources:
+      jobs:
+        medallion:
+          # dev is the working environment and owns the armed file-arrival
+          # trigger on landing/. `mode: production` does not auto-pause
+          # triggers, so without this override a demo deploy would arm a
+          # second trigger on the same volume path, racing dev's run against
+          # the same bronze/silver/gold tables on a single upstream publish.
+          trigger:
+            pause_status: PAUSED

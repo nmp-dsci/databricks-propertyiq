@@ -40,5 +40,37 @@ resources:
           notebook_task:
             notebook_path: ../../src/notebooks/04_checks.py
 
+      # Run when propertyiq_getdata lands a file, rather than on a clock. A
+      # schedule would fire on the many days with no new data, and would also
+      # sit idle for hours after a publish that did happen.
+      #
+      # `url` must be a directory. Auto Loader below reads landing/sales and
+      # landing/lodgements separately, but the trigger watches their shared
+      # parent so one trigger covers both feeds.
+      #
+      # wait_after_last_change_seconds debounces a multi-file publish: getdata
+      # uploads hundreds of partitions on a bootstrap, and without it every
+      # file would be a candidate to start a run. 60s of quiet means "the
+      # publish has finished", and min_time_between_triggers_seconds then caps
+      # us at one run per 5 minutes whatever happens upstream.
+      #
+      # `mode: development` would normally pause this, the same way it pauses
+      # schedules, so that a deploy from a laptop never starts running things.
+      # The explicit UNPAUSED overrides that, because here the dev target *is*
+      # the working environment — there is only one workspace. `make run`
+      # still works for an on-demand run.
+      #
+      # The `demo` target (databricks.yml) is `mode: production`, which does
+      # NOT auto-pause triggers, so it carries its own per-target override
+      # (trigger.pause_status: PAUSED) to keep it from arming a second
+      # trigger on this same landing/ path and racing dev's run against the
+      # same bronze/silver/gold tables.
+      trigger:
+        pause_status: UNPAUSED
+        file_arrival:
+          url: /Volumes/${var.catalog}/${var.schema}/${var.volume}/landing/
+          wait_after_last_change_seconds: 60
+          min_time_between_triggers_seconds: 300
+
       queue:
         enabled: true

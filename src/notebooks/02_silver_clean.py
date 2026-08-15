@@ -22,7 +22,7 @@ import sys
 # in the local test run. Bundles sync the whole tree, so the sibling is present.
 sys.path.insert(0, os.path.abspath(".."))
 
-from lib.transforms import clean_rent, clean_sales  # noqa: E402
+from lib.transforms import clean_rent, clean_sales, resolve_versions  # noqa: E402
 
 # COMMAND ----------
 
@@ -34,7 +34,10 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
-silver_sales = clean_sales(spark.table(f"{catalog}.{schema}.bronze_sales"))
+# resolve_versions first: landing is append-only, so a partition rewritten
+# upstream (rentboard rewrites its trailing month every run) sits in bronze as
+# two files. Keeping both would double-count that month. See transforms.py.
+silver_sales = clean_sales(resolve_versions(spark.table(f"{catalog}.{schema}.bronze_sales")))
 (
     silver_sales.write.mode("overwrite")
     .option("overwriteSchema", "true")
@@ -42,7 +45,7 @@ silver_sales = clean_sales(spark.table(f"{catalog}.{schema}.bronze_sales"))
     .saveAsTable(f"{catalog}.{schema}.silver_sales")
 )
 
-silver_rent = clean_rent(spark.table(f"{catalog}.{schema}.bronze_rent"))
+silver_rent = clean_rent(resolve_versions(spark.table(f"{catalog}.{schema}.bronze_rent")))
 (
     silver_rent.write.mode("overwrite")
     .option("overwriteSchema", "true")

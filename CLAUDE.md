@@ -15,10 +15,11 @@ the full picture; this file is the working agreement.
   workspace's own egress, not about how source data was originally obtained.
 - **Public open data only.** This repo's data is NSW Valuer General property
   sales and NSW Rental Bond Board rental lodgements — both public, open
-  government datasets, uploaded as CSVs into a Unity Catalog volume by a
-  separate local pipeline that runs outside the workspace. Free Edition is
-  non-commercial use only. Never add proprietary, confidential, commercial, or
-  personal data.
+  government datasets, published as an updates-only Parquet feed into a Unity
+  Catalog volume (under `landing/sales/` and `landing/lodgements/`) by a
+  separate local pipeline (`propertyiq_getdata`) that runs outside the
+  workspace. Free Edition is non-commercial use only. Never add proprietary,
+  confidential, commercial, or personal data.
 - **Never commit `.env`, tokens, or `~/.databrickscfg` contents.**
 - **Never write a person's name into this repo.** See below — this one is easy to
   breach by accident.
