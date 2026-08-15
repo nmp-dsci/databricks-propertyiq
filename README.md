@@ -121,6 +121,14 @@ databricks`), which runs outside this workspace. The rules are a deliberate
 port of tested dbt models from a sibling project (`data-qa-agent`), with one
 intentional divergence explained below.
 
+The job runs on a **file arrival trigger** watching the `landing/` directory,
+so publishing upstream starts a run about a minute later rather than waiting
+for someone to type `make run` (which still forces one on demand). A clock
+schedule would have fired on the many days with no new data, and still sat
+idle for hours after a publish that did happen. The trigger debounces a
+multi-file publish and is capped at one run per five minutes — see
+`resources/jobs/medallion_job.yml`.
+
 **01 · bronze** — Auto Loader (`cloudFiles`) with `Trigger.AvailableNow`:
 streaming file-tracking semantics on a batch cadence, reading Parquet files
 from `landing/`. Append-only, every column declared as `STRING` (the landing
