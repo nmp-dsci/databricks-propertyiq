@@ -18,13 +18,14 @@ databricks.yml                 bundle definition — targets, variables
 resources/
   jobs/medallion_job.yml       4-task serverless job (bronze → silver → gold → checks)
   dashboards/property_overview.yml
+genie/propertyiq.genie.json    Genie space definition (checked in for reproducibility, not a bundle resource)
 src/
   notebooks/*.py               Databricks source-format notebooks (render as notebooks up there)
   lib/transforms.py            the actual logic — pure, unit-tested, no I/O
   sql/*.sql                    warehouse queries, runnable from the terminal
 dashboards/*.lvdash.json       AI/BI dashboard, deployed as code
 tests/                         local Spark tests, no workspace required
-scripts/                       setup, auth, SQL runner
+scripts/                       setup, auth, SQL runner, gold/dbt parity check
 ```
 
 ### The one trick that makes this work
@@ -113,24 +114,36 @@ silently overwriting UI edits you forgot to pull.
 
 A medallion pipeline over real NSW property data: Valuer General property
 sales (~3.1M rows) and Rental Bond Board rental lodgements (~3.3M rows),
-already uploaded as CSVs into the `workspace.propertyiq` Unity Catalog volume.
-The rules are a deliberate port of tested dbt models from a sibling project
-(`data-qa-agent`), with one intentional divergence explained below.
+landed as an updates-only Parquet feed under `landing/sales/` and
+`landing/lodgements/` in the `workspace.propertyiq` Unity Catalog volume by
+the sibling `propertyiq_getdata` project (`propertyiq-getdata publish
+databricks`), which runs outside this workspace. The rules are a deliberate
+port of tested dbt models from a sibling project (`data-qa-agent`), with one
+intentional divergence explained below.
 
 **01 · bronze** — Auto Loader (`cloudFiles`) with `Trigger.AvailableNow`:
-streaming file-tracking semantics on a batch cadence, reading the two landed
-CSVs straight from the volume. Append-only, every column declared as `STRING`
-(the landing contract, not inferred), unexpected fields land in `_rescued_data`
-instead of failing the run. Bronze is the rebuild point when silver logic turns
-out wrong.
+streaming file-tracking semantics on a batch cadence, reading Parquet files
+from `landing/`. Append-only, every column declared as `STRING` (the landing
+contract, not inferred — Parquet carries its own types, but silver's parsers
+are string-based), unexpected fields land in `_rescued_data` instead of
+failing the run. Checkpoints and schema locations are suffixed with a feed
+version (`FEED_VERSION` in the notebook) so a future feed-format change gets a
+clean re-ingest instead of Auto Loader silently skipping every new file.
+Bronze is the rebuild point when silver logic turns out wrong.
 
 **02 · silver** — Typed, repaired and quality-flagged, ported from the dbt
 `stg_sales` / `stg_rent` models that cleaned this exact data for Postgres.
-**Invalid rows are kept**, with a `_quality` array naming every rule they
-failed, rather than dropped in a `WHERE` clause as the dbt originals do — gold
-applies the filter instead, so the quality dashboard and the price dashboard
-read from the same table. Delta `NOT NULL` constraints on the surrogate keys
-make the contract enforceable rather than aspirational.
+Before typing, `resolve_versions` collapses bronze to one row set per landed
+partition: landing is append-only, so a partition rewritten upstream (rentboard
+rewrites its trailing month every run) arrives as a second file rather than
+replacing the first, and the newest `_ingested_at` per partition wins. It also
+drops any bronze rows that didn't come from a landing file, so history kept
+from the pre-Parquet monolith CSVs can't double-count gold once the feed has
+moved on. **Invalid rows are kept**, with a `_quality` array naming every rule
+they failed, rather than dropped in a `WHERE` clause as the dbt originals do —
+gold applies the filter instead, so the quality dashboard and the price
+dashboard read from the same table. Delta `NOT NULL` constraints on the
+surrogate keys make the contract enforceable rather than aspirational.
 
 **03 · gold** — Three monthly marts (`gold_property_sales`,
 `gold_property_rent`, `gold_property_yield`) plus a `gold_quality_summary`
@@ -173,6 +186,33 @@ numeric parsing happens, with a test fixture added to cover it.
 
 ---
 
+## Checking gold against an independent reference
+
+`scripts/parity_check.py` recomputes the gold marts a third way — DuckDB
+running SQL transcribed from `data-qa-agent`'s dbt models, straight from the
+canonical CSV partitions in `propertyiq_getdata` — and diffs the result
+against what the Databricks job produced, month by month:
+
+```bash
+uv run python scripts/parity_check.py --profile DEFAULT
+```
+
+Additive metrics must match exactly and the script exits non-zero if they
+don't; three known, documented labelling differences between the dbt and
+Spark ports are reported but not enforced. See the module docstring for
+details.
+
+## Genie space
+
+`genie/propertyiq.genie.json` is the PropertyIQ Genie space definition,
+checked in for reproducibility only — Genie spaces aren't a bundle resource
+type, so `make deploy` doesn't touch it. Recreate it with
+`databricks genie create-space`. That API is picky about two things: every
+`data_sources.tables` and instruction / sample-question list must be sorted by
+identifier or id, and each entry needs a caller-supplied lowercase 32-hex id.
+
+---
+
 ## Free Edition constraints, and what each one forced
 
 | Constraint | Consequence here |
@@ -180,7 +220,7 @@ numeric parsing happens, with a test fixture added to cover it.
 | Serverless compute only | No `job_clusters:` anywhere — omitting compute *is* the config |
 | One 2X-Small warehouse | Dashboards read pre-aggregated gold, never row-level silver |
 | 5 concurrent job tasks | Job is a 4-task sequential DAG |
-| Restricted outbound internet | Source CSVs are uploaded into a UC volume ahead of time, never downloaded by the pipeline itself |
+| Restricted outbound internet | Source data is published into a UC volume ahead of time by a separate local pipeline, never downloaded by the workspace itself |
 | No account-level API | Everything is workspace-scoped; no service principals |
 | Non-commercial use only | Public open government data only (NSW Valuer General, Rental Bond Board) — no proprietary or customer data |
 

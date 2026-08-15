@@ -11,7 +11,8 @@ variables:
   volume:
     description: >-
       UC volume (inside the schema) holding the landed source files —
-      today the two monolith CSVs, later the updates-only Parquet feed.
+      the updates-only Parquet feed published under landing/sales/ and
+      landing/lodgements/ by the sibling propertyiq_getdata project.
     default: propertyiq
   warehouse_id:
     description: >-
