@@ -13,8 +13,22 @@
 # MAGIC
 # MAGIC Auto Loader (`cloudFiles`) with `Trigger.AvailableNow` gives streaming
 # MAGIC semantics — exactly-once file tracking via the checkpoint — on a batch
-# MAGIC cadence. Today it reads the two uploaded CSVs; when the updates-only
-# MAGIC Parquet feed lands in `landing/`, only the options cell changes.
+# MAGIC cadence.
+# MAGIC
+# MAGIC The feed is the updates-only Parquet published by `propertyiq_getdata`
+# MAGIC (`propertyiq-getdata publish databricks`) into `landing/sales/` and
+# MAGIC `landing/lodgements/`. Each file is one partition, named
+# MAGIC `<partition>_<sha8>.parquet` where the hash is of the source CSV. That
+# MAGIC makes landing **append-only**: a rewritten partition — rentboard rewrites
+# MAGIC its trailing month every run — arrives as a NEW file beside the old one
+# MAGIC rather than replacing it, which is the only shape Auto Loader can ingest
+# MAGIC correctly, since it tracks files exactly-once and never re-reads a
+# MAGIC changed one. Silver picks the winning version per partition.
+# MAGIC
+# MAGIC The declared all-STRING schema is kept deliberately even though Parquet
+# MAGIC carries its own types: the publisher writes every column as a string, and
+# MAGIC silver's parsers are string-based (`lodgement_dt` is matched with a
+# MAGIC `^\d{4}-\d{2}-\d{2}` regex, which a real DATE would fail).
 
 # COMMAND ----------
 
@@ -27,6 +41,7 @@ schema = dbutils.widgets.get("schema")
 volume = dbutils.widgets.get("volume")
 
 volume_root = f"/Volumes/{catalog}/{schema}/{volume}"
+landing_root = f"{volume_root}/landing"
 state_root = f"{volume_root}/_pipeline"
 
 # COMMAND ----------
@@ -53,18 +68,23 @@ RENT_SCHEMA = """
 """
 
 
-def ingest(name: str, ddl: str, glob: str) -> None:
-    """One Auto Loader pass: volume file(s) -> bronze Delta table."""
+# Checkpoints are versioned in their name. The feed changed format (CSV at the
+# volume root -> Parquet under landing/), and a checkpoint carries the file
+# list and schema of the feed it was built against, so reusing one would make
+# Auto Loader skip the new files entirely. A new suffix = a clean re-ingest.
+FEED_VERSION = "v2_parquet"
+
+
+def ingest(name: str, ddl: str, subdir: str) -> None:
+    """One Auto Loader pass: landing/<subdir>/*.parquet -> bronze Delta table."""
     target = f"{catalog}.{schema}.bronze_{name}"
     stream = (
         spark.readStream.format("cloudFiles")
-        .option("cloudFiles.format", "csv")
-        .option("cloudFiles.schemaLocation", f"{state_root}/schemas/bronze_{name}")
+        .option("cloudFiles.format", "parquet")
+        .option("cloudFiles.schemaLocation", f"{state_root}/schemas/bronze_{name}_{FEED_VERSION}")
         .option("cloudFiles.schemaEvolutionMode", "rescue")
-        .option("pathGlobFilter", glob)
-        .option("header", "true")
         .schema(ddl)
-        .load(volume_root)
+        .load(f"{landing_root}/{subdir}")
         .select(
             "*",
             F.col("_metadata.file_path").alias("_source_file"),
@@ -73,21 +93,23 @@ def ingest(name: str, ddl: str, glob: str) -> None:
     )
     (
         stream.writeStream.format("delta")
-        .option("checkpointLocation", f"{state_root}/checkpoints/bronze_{name}")
+        .option("checkpointLocation", f"{state_root}/checkpoints/bronze_{name}_{FEED_VERSION}")
         .option("mergeSchema", "true")
         .trigger(availableNow=True)
         .toTable(target)
     ).awaitTermination()
-    print(f"{target}: {spark.table(target).count():,} rows")
+    total = spark.table(target).count()
+    files = spark.table(target).select("_source_file").distinct().count()
+    print(f"{target}: {total:,} rows from {files:,} landed files")
 
 
 # COMMAND ----------
 
-ingest("sales", SALES_SCHEMA, "nswgov_df.csv")
+ingest("sales", SALES_SCHEMA, "sales")
 
 # COMMAND ----------
 
-ingest("rent", RENT_SCHEMA, "rentboard_df.csv")
+ingest("rent", RENT_SCHEMA, "lodgements")
 
 # COMMAND ----------
 

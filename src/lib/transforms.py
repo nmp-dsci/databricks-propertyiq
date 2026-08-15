@@ -59,6 +59,47 @@ def _digits_from_floatish(col: Column) -> Column:
     return _safe_double(col).cast("bigint").cast("string")
 
 
+def resolve_versions(df: DataFrame) -> DataFrame:
+    """Keep only the newest landed file per partition.
+
+    The landing area is append-only, so a partition that gets rewritten
+    upstream arrives as a second file rather than replacing the first:
+
+        landing/lodgements/month=2026-06_f720a07c.parquet   <- first run
+        landing/lodgements/month=2026-06_9c4e11ab.parquet   <- month rewritten
+
+    Both are in bronze (correctly — bronze is lossless). Silver has to pick one,
+    or every row of a revised month is counted twice. The partition label is
+    everything before the `_<sha8>.parquet` suffix, and the winner is the file
+    with the latest `_ingested_at`; ties break on the filename so the result is
+    deterministic when a bootstrap lands many files in the same second.
+
+    Immutable partitions (all of sales) have exactly one file per label, so this
+    is a no-op for them — it is applied uniformly anyway, because "sales never
+    gets restated" is an upstream assumption rather than a guarantee.
+
+    Rows that did not come from a landing file are dropped. Bronze is history,
+    so it still holds everything ingested from the pre-Parquet feed — the two
+    monolith CSVs at the volume root — and those rows carry the same sales and
+    bonds as the partitions do. Keeping them would double every figure in gold.
+    Membership is decided by the filename contract (`<partition>_<sha8>.parquet`)
+    rather than by a date cutoff, so it stays correct however often the feed is
+    replayed or bronze is rebuilt.
+    """
+    labelled = df.withColumn(
+        "_partition",
+        F.regexp_extract(F.col("_source_file"), r"([^/]+)_[0-9a-f]{8}\.parquet$", 1),
+    ).filter(F.col("_partition") != "")
+    newest = Window.partitionBy("_partition").orderBy(
+        F.col("_ingested_at").desc(), F.col("_source_file").desc()
+    )
+    return (
+        labelled.withColumn("_version_rank", F.dense_rank().over(newest))
+        .filter(F.col("_version_rank") == 1)
+        .drop("_version_rank", "_partition")
+    )
+
+
 def clean_sales(df: DataFrame) -> DataFrame:
     """Bronze sales (all-string) -> typed, repaired, quality-flagged silver.
 

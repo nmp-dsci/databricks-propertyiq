@@ -18,6 +18,7 @@ from lib.transforms import (
     gold_sales_monthly,
     gold_yield_monthly,
     quality_summary,
+    resolve_versions,
 )
 
 SALES_COLUMNS = [
@@ -228,3 +229,117 @@ class TestGold:
         _, silver_rent = _yield_inputs(spark)
         summary = quality_summary(silver_rent, "rent_month")
         assert summary.agg({"rows": "sum"}).collect()[0][0] == 8
+
+
+class TestVersionResolution:
+    """Append-only landing means a rewritten partition arrives as a second file.
+
+    `resolve_versions` is what stops that from double-counting. These fixtures
+    mimic what Auto Loader puts in bronze: the same business rows twice, from
+    two files sharing a partition label but carrying different content hashes
+    and different ingest timestamps.
+    """
+
+    LANDING = "dbfs:/Volumes/workspace/propertyiq/propertyiq/landing/lodgements"
+
+    def _bronze(self, spark, rows):
+        """rows: (source_file, ingested_at, marker) -> a bronze-shaped frame."""
+        from datetime import datetime
+
+        return spark.createDataFrame(
+            [
+                (f"{self.LANDING}/{name}", datetime.fromisoformat(stamp), marker)
+                for name, stamp, marker in rows
+            ],
+            ["_source_file", "_ingested_at", "marker"],
+        )
+
+    def test_newest_version_of_a_partition_wins(self, spark):
+        bronze = self._bronze(
+            spark,
+            [
+                ("month=2026-06_aaaaaaaa.parquet", "2026-08-01T00:00:00", "old"),
+                ("month=2026-06_bbbbbbbb.parquet", "2026-08-14T00:00:00", "new"),
+            ],
+        )
+        resolved = resolve_versions(bronze)
+        assert [row.marker for row in resolved.collect()] == ["new"]
+
+    def test_distinct_partitions_all_survive(self, spark):
+        bronze = self._bronze(
+            spark,
+            [
+                ("month=2026-05_aaaaaaaa.parquet", "2026-08-01T00:00:00", "may"),
+                ("month=2026-06_bbbbbbbb.parquet", "2026-08-01T00:00:00", "june"),
+                ("month=2026-07_cccccccc.parquet", "2026-08-01T00:00:00", "july"),
+            ],
+        )
+        assert sorted(row.marker for row in resolve_versions(bronze).collect()) == [
+            "july",
+            "june",
+            "may",
+        ]
+
+    def test_all_rows_of_the_winning_file_are_kept(self, spark):
+        bronze = self._bronze(
+            spark,
+            [
+                ("month=2026-06_aaaaaaaa.parquet", "2026-08-01T00:00:00", "old"),
+                ("month=2026-06_aaaaaaaa.parquet", "2026-08-01T00:00:00", "old"),
+                ("month=2026-06_bbbbbbbb.parquet", "2026-08-14T00:00:00", "new"),
+                ("month=2026-06_bbbbbbbb.parquet", "2026-08-14T00:00:00", "new"),
+                ("month=2026-06_bbbbbbbb.parquet", "2026-08-14T00:00:00", "new"),
+            ],
+        )
+        resolved = resolve_versions(bronze)
+        assert resolved.count() == 3, "dense_rank keeps every row of the winner"
+        assert {row.marker for row in resolved.collect()} == {"new"}
+
+    def test_same_second_bootstrap_breaks_ties_deterministically(self, spark):
+        bronze = self._bronze(
+            spark,
+            [
+                ("month=2026-06_aaaaaaaa.parquet", "2026-08-01T00:00:00", "a"),
+                ("month=2026-06_ffffffff.parquet", "2026-08-01T00:00:00", "f"),
+            ],
+        )
+        assert [row.marker for row in resolve_versions(bronze).collect()] == ["f"]
+
+    def test_sales_partitions_are_untouched(self, spark):
+        """Immutable partitions have one file each — resolution is a no-op."""
+        bronze = self._bronze(
+            spark,
+            [
+                ("period=20260622_aaaaaaaa.parquet", "2026-08-01T00:00:00", "w1"),
+                ("period=20260629_bbbbbbbb.parquet", "2026-08-01T00:00:00", "w2"),
+            ],
+        )
+        assert resolve_versions(bronze).count() == 2
+
+    def test_resolution_drops_its_own_helper_columns(self, spark):
+        bronze = self._bronze(
+            spark, [("month=2026-06_aaaaaaaa.parquet", "2026-08-01T00:00:00", "x")]
+        )
+        assert set(resolve_versions(bronze).columns) == set(bronze.columns)
+
+    def test_legacy_csv_rows_are_excluded(self, spark):
+        """Bronze still holds the pre-Parquet monolith rows; they must not count.
+
+        Without this filter every sale and bond would appear twice in gold —
+        once from `nswgov_df.csv` and once from the partition that supersedes it.
+        """
+        bronze = self._bronze(
+            spark,
+            [
+                ("../nswgov_df.csv", "2026-07-01T00:00:00", "legacy"),
+                ("month=2026-06_bbbbbbbb.parquet", "2026-08-14T00:00:00", "landing"),
+            ],
+        )
+        resolved = resolve_versions(bronze)
+        assert [row.marker for row in resolved.collect()] == ["landing"]
+
+    def test_a_bronze_of_only_legacy_rows_resolves_to_nothing(self, spark):
+        bronze = self._bronze(
+            spark, [("../rentboard_df.csv", "2026-07-01T00:00:00", "legacy")]
+        )
+        assert resolve_versions(bronze).count() == 0
