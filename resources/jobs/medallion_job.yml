@@ -57,9 +57,14 @@ resources:
       # `mode: development` would normally pause this, the same way it pauses
       # schedules, so that a deploy from a laptop never starts running things.
       # The explicit UNPAUSED overrides that, because here the dev target *is*
-      # the working environment — there is only one workspace. Drop that line
-      # if a second target ever appears, or a local deploy will arm a trigger
-      # against shared data. `make run` still works for an on-demand run.
+      # the working environment — there is only one workspace. `make run`
+      # still works for an on-demand run.
+      #
+      # The `demo` target (databricks.yml) is `mode: production`, which does
+      # NOT auto-pause triggers, so it carries its own per-target override
+      # (trigger.pause_status: PAUSED) to keep it from arming a second
+      # trigger on this same landing/ path and racing dev's run against the
+      # same bronze/silver/gold tables.
       trigger:
         pause_status: UNPAUSED
         file_arrival:
