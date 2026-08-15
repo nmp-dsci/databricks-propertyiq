@@ -339,7 +339,5 @@ class TestVersionResolution:
         assert [row.marker for row in resolved.collect()] == ["landing"]
 
     def test_a_bronze_of_only_legacy_rows_resolves_to_nothing(self, spark):
-        bronze = self._bronze(
-            spark, [("../rentboard_df.csv", "2026-07-01T00:00:00", "legacy")]
-        )
+        bronze = self._bronze(spark, [("../rentboard_df.csv", "2026-07-01T00:00:00", "legacy")])
         assert resolve_versions(bronze).count() == 0
