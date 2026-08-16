@@ -239,17 +239,18 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:13px}
 
 <section id="free">
   <h2>Free Edition reality check</h2>
-  <p class="sub">What the docs confirm, what they don't. Anything "unverified" is called out in the demo narrative rather than hand-waved — the hiring-manager video is blunt that faking knowledge fails.</p>
+  <p class="sub">Updated after the live build (2026-08-16): "verified live" rows were proven by actual runs in this workspace; the one platform break found is documented in code rather than papered over.</p>
   <div class="panel tbl-scroll"><table>
     <thead><tr><th>Capability</th><th>Free Edition</th><th>Consequence for the design</th></tr></thead>
     <tbody>
       <tr><td>MLflow 3 tracking + UC registry + aliases</td><td><span class="chip">verified</span></td><td>Core of every option.</td></tr>
       <tr><td>Serverless jobs (training + batch scoring)</td><td><span class="chip">verified</span></td><td>5 concurrent tasks — fine for this scale.</td></tr>
       <tr><td>Model Serving (CPU endpoints)</td><td><span class="chip">verified</span></td><td>Limited endpoint count, no GPU — Option C uses exactly one.</td></tr>
-      <tr><td><code>mlflow.pyfunc.spark_udf</code> on serverless</td><td><span class="chip">verified</span></td><td>The batch-scoring pattern; ~1&nbsp;GB UDF memory cap.</td></tr>
-      <tr><td>sklearn / lightgbm via pinned <code>%pip</code></td><td><span class="chip amber">community-verified</span></td><td>PyPI reachable per community posts; fallback = wheel in a UC Volume.</td></tr>
-      <tr><td><code>AI_FORECAST</code> on serverless warehouse</td><td><span class="chip amber">unverified</span></td><td>Warehouse type qualifies; Option B tests it first, keeps a trained-model path as the primary.</td></tr>
-      <tr><td>Lakehouse Monitoring</td><td><span class="chip amber">unverified</span></td><td>Hand-rolled drift metrics table + SQL alert instead — works everywhere.</td></tr>
+      <tr><td><code>mlflow.pyfunc.spark_udf</code> on serverless</td><td><span class="chip fail">broken — found live</span></td><td>The environment's mlflow crashes parsing serverless runtime version <code>'18.x-aarch64-photon-scala2'</code>. Driver-side pandas scoring used instead (right-sized at this scale anyway); documented in the scoring notebook.</td></tr>
+      <tr><td>sklearn (pre-installed, no pip)</td><td><span class="chip">verified live</span></td><td>HistGradientBoosting trained + registered on serverless with zero installs.</td></tr>
+      <tr><td><code>AI_FORECAST</code> on the Free warehouse</td><td><span class="chip">verified live</span></td><td>Runs on the 2X-Small serverless warehouse, with prediction intervals and <code>group_col</code>.</td></tr>
+      <tr><td><code>ai_query()</code> → custom endpoint</td><td><span class="chip">verified live</span></td><td>Row-level real-time inference from plain SQL on the Free warehouse works.</td></tr>
+      <tr><td>Lakehouse Monitoring</td><td><span class="chip amber">unverified</span></td><td>Hand-rolled drift metrics table + SQL alert instead — works everywhere, and is now built.</td></tr>
       <tr><td>Spark MLlib</td><td><span class="chip fail">unavailable</span></td><td>Spark Connect only — single-node sklearn/lightgbm, parallelised with <code>applyInPandas</code>.</td></tr>
       <tr><td>Online feature store (Lakebase)</td><td><span class="chip amber">unverified</span></td><td>Out of scope; batch feature lookup only.</td></tr>
       <tr><td>Multiple workspaces (dev/staging/prod)</td><td><span class="chip fail">unavailable</span></td><td>Simulated as catalogs/schemas + bundle targets — and narrated as such.</td></tr>
