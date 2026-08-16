@@ -3,8 +3,9 @@
 # MAGIC # ML 03 · Batch score
 # MAGIC
 # MAGIC Scores the latest feature month with whatever `@champion` currently points
-# MAGIC at, via `mlflow.pyfunc.spark_udf`. The features are rebuilt by the **same
-# MAGIC tested function** the training path used, so there is no second feature
+# MAGIC at — loaded once on the driver and scored in pandas (see the scoring cell
+# MAGIC for why not `spark_udf`). The features are rebuilt by the **same tested
+# MAGIC function** the training path used, so there is no second feature
 # MAGIC implementation to drift.
 # MAGIC
 # MAGIC Every scored row is stamped with the model version and timestamp — any
