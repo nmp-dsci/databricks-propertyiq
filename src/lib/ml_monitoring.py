@@ -69,8 +69,29 @@ def feature_psi_frame(
     rows = []
     for col in columns:
         value = psi(reference[col], current[col])
-        status = (
-            "shifted" if value > PSI_SHIFTED else "drifting" if value > PSI_DRIFTING else "stable"
-        )
+        if np.isnan(value):
+            # Empty reference or current window: there is nothing to compare,
+            # so this is not the same as "stable" — flag it distinctly rather
+            # than let it fall through the shifted/drifting checks (nan > x is
+            # always False) and read as a clean bill of health.
+            status = "unmonitorable"
+        elif value > PSI_SHIFTED:
+            status = "shifted"
+        elif value > PSI_DRIFTING:
+            status = "drifting"
+        else:
+            status = "stable"
         rows.append({"feature": col, "psi": value, "status": status})
     return pd.DataFrame(rows)
+
+
+def max_monitorable_psi(psi_pdf: pd.DataFrame) -> float:
+    """Worst PSI across features that could actually be compared.
+
+    ``psi_pdf["psi"].max()`` propagates NaN if any feature was unmonitorable,
+    and NaN > 0.25 is silently False — the condition task would never trigger
+    a retrain. Reducing over the monitorable rows keeps the task value a real
+    number a GREATER_THAN condition can act on.
+    """
+    monitorable = psi_pdf.loc[psi_pdf["status"] != "unmonitorable", "psi"]
+    return float(monitorable.max()) if not monitorable.empty else 0.0

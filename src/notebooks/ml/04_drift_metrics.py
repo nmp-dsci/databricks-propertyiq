@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.abspath("../.."))
 from pyspark.sql import functions as F  # noqa: E402
 
 from lib.ml_features import NUMERIC_FEATURES  # noqa: E402
-from lib.ml_monitoring import drift_columns, feature_psi_frame  # noqa: E402
+from lib.ml_monitoring import drift_columns, feature_psi_frame, max_monitorable_psi  # noqa: E402
 
 # COMMAND ----------
 
@@ -133,7 +133,9 @@ display(spark.table(acc_target).orderBy(F.desc("month")))
 # COMMAND ----------
 
 # The condition task in ml_score reads this: max PSI over the latest month.
-# > 0.25 ("shifted") routes the run into the retrain task.
-max_psi = float(psi_pdf["psi"].max())
+# > 0.25 ("shifted") routes the run into the retrain task. Unmonitorable
+# features (empty reference/current window) are excluded rather than left in
+# as NaN, which would silently defeat the GREATER_THAN condition.
+max_psi = max_monitorable_psi(psi_pdf)
 dbutils.jobs.taskValues.set("max_psi", max_psi)
 print(f"max PSI this month: {max_psi:.4f}")
