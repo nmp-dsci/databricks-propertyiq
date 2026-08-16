@@ -260,10 +260,16 @@ piece of production ML on Free Edition rather than chasing accuracy:
   **trailing 24-month** reference — an all-history reference would make the
   trend in rents itself look like permanent drift) and MAE per month.
   `month_of_year` is excluded from PSI, since a cyclical feature always reads
-  as drifted against a full-year window. The job's `check_drift` condition
-  task reads the max PSI task value; above 0.25 ("shifted") it fires
-  `ml_train` automatically via a `run_job_task` — retraining triggers because
-  the input moved, not on a schedule.
+  as drifted against a full-year window. A feature with an empty reference or
+  current window is labelled `unmonitorable` rather than `stable` — PSI is
+  `NaN` there, and `NaN > threshold` is always false, so leaving it as
+  `stable` would silently read as a clean bill of health. The job's
+  `check_drift` condition task reads `max_monitorable_psi()`, the worst PSI
+  over features that could actually be compared (excluding `unmonitorable`
+  ones, so a `NaN` never propagates into the condition and defeats it);
+  above 0.25 ("shifted") it fires `ml_train` automatically via a
+  `run_job_task` — retraining triggers because the input moved, not on a
+  schedule.
 
 `ml_score` runs off a table-update trigger on `gold_property_rent`, one hop
 downstream of the medallion job, same event-driven pattern as the medallion's
