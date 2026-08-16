@@ -21,6 +21,13 @@ variables:
       can never write over the tables the medallion job owns — it is a
       side-by-side comparison, not a replacement.
     default: propertyiq_dp
+  ml_schema:
+    description: >-
+      Schema for the ML loop (feature table, model, predictions, drift
+      metrics). Separate from `schema` for the same reason as
+      pipeline_schema: the ML jobs can never write over the marts the
+      medallion job owns.
+    default: propertyiq_ml
   warehouse_id:
     description: >-
       Serverless SQL warehouse id, used by dashboards and SQL tasks.
@@ -63,6 +70,12 @@ targets:
           # triggers, so without this override a demo deploy would arm a
           # second trigger on the same volume path, racing dev's run against
           # the same bronze/silver/gold tables on a single upstream publish.
+          trigger:
+            pause_status: PAUSED
+        ml_score:
+          # Same reasoning as medallion above: dev owns the armed table-update
+          # trigger on gold_property_rent; a demo deploy must not arm a second
+          # one that double-scores every mart rebuild.
           trigger:
             pause_status: PAUSED
       pipelines:

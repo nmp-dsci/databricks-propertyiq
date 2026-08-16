@@ -1,0 +1,76 @@
+# The serving half of the ML loop: score the latest month with the champion,
+# compute drift + accuracy metrics, and — when the input distribution has
+# shifted — trigger retraining automatically.
+#
+# The retrain wiring is the point of the whole job: drift is not a dashboard
+# someone should notice, it is a condition that routes the run into ml_train.
+# PSI > 0.25 ("shifted", the conventional threshold — see lib/ml_monitoring.py)
+# flips the condition task true and the run_job_task fires.
+resources:
+  jobs:
+    ml_score:
+      name: propertyiq-ml-score
+      max_concurrent_runs: 1
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: ml_schema
+          default: ${var.ml_schema}
+        - name: reference_months
+          default: "24"
+
+      tasks:
+        # Rebuild features first so scoring always sees the current gold marts
+        # — the same notebook (and the same tested function) the trainer uses.
+        - task_key: build_features
+          notebook_task:
+            notebook_path: ../../src/notebooks/ml/01_build_features.py
+
+        - task_key: score
+          depends_on:
+            - task_key: build_features
+          notebook_task:
+            notebook_path: ../../src/notebooks/ml/03_batch_score.py
+
+        - task_key: drift
+          depends_on:
+            - task_key: score
+          notebook_task:
+            notebook_path: ../../src/notebooks/ml/04_drift_metrics.py
+
+        # Input has shifted → the champion trained on a different world.
+        - task_key: check_drift
+          depends_on:
+            - task_key: drift
+          condition_task:
+            op: GREATER_THAN
+            left: "{{tasks.drift.values.max_psi}}"
+            right: "0.25"
+
+        - task_key: retrain
+          depends_on:
+            - task_key: check_drift
+              outcome: "true"
+          run_job_task:
+            job_id: ${resources.jobs.ml_train.id}
+
+      # Score when the rent mart actually changes, instead of on a clock: the
+      # medallion job rewrites gold_property_rent when the upstream feed lands,
+      # and this fires off the back of that. Same event-driven rhythm as the
+      # medallion's file-arrival trigger, one hop downstream.
+      #
+      # Like the medallion trigger: dev-mode would pause this, but dev *is* the
+      # working environment, so it is explicitly UNPAUSED.
+      trigger:
+        pause_status: UNPAUSED
+        table_update:
+          table_names:
+            - ${var.catalog}.${var.schema}.gold_property_rent
+          condition: ANY_UPDATED
+          min_time_between_triggers_seconds: 3600
+
+      queue:
+        enabled: true
