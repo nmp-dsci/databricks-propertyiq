@@ -14,6 +14,13 @@ variables:
       the updates-only Parquet feed published under landing/sales/ and
       landing/lodgements/ by the sibling propertyiq_getdata project.
     default: propertyiq
+  pipeline_schema:
+    description: >-
+      Schema for the Lakeflow Declarative Pipeline variant in
+      resources/pipelines/. Deliberately separate from `schema` so the pipeline
+      can never write over the tables the medallion job owns — it is a
+      side-by-side comparison, not a replacement.
+    default: propertyiq_dp
   warehouse_id:
     description: >-
       Serverless SQL warehouse id, used by dashboards and SQL tasks.
@@ -25,6 +32,7 @@ variables:
 include:
   - resources/jobs/*.yml
   - resources/dashboards/*.yml
+  - resources/pipelines/*.yml
 
 targets:
   # Default target. Deploys under /Workspace/Users/<you>/.bundle/... so nothing
@@ -57,3 +65,9 @@ targets:
           # the same bronze/silver/gold tables on a single upstream publish.
           trigger:
             pause_status: PAUSED
+      pipelines:
+        medallion_pipeline:
+          # The pipeline yml sets development: true for fast dev iteration;
+          # production mode refuses that combination, so the demo release
+          # flips it here rather than forking the resource file.
+          development: false
