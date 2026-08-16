@@ -40,6 +40,7 @@ include:
   - resources/jobs/*.yml
   - resources/dashboards/*.yml
   - resources/pipelines/*.yml
+  - resources/serving/*.yml
 
 targets:
   # Default target. Deploys under /Workspace/Users/<you>/.bundle/... so nothing

@@ -35,10 +35,12 @@ from lib.ml_model import (  # noqa: E402
 dbutils.widgets.text("catalog", "workspace")
 dbutils.widgets.text("ml_schema", "propertyiq_ml")
 dbutils.widgets.text("holdout_months", "6")
+dbutils.widgets.text("endpoint", "propertyiq-rent-estimator")
 
 catalog = dbutils.widgets.get("catalog")
 ml_schema = dbutils.widgets.get("ml_schema")
 holdout_months = int(dbutils.widgets.get("holdout_months"))
+endpoint_name = dbutils.widgets.get("endpoint")
 
 MODEL_NAME = f"{catalog}.{ml_schema}.rent_estimator"
 
@@ -143,3 +145,45 @@ print(verdict)
 # Downstream tasks (and the jobs UI) get the verdict as a task value.
 dbutils.jobs.taskValues.set("promoted", promoted)
 dbutils.jobs.taskValues.set("challenger_mae", challenger_mae)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Roll the serving endpoint forward with the alias
+# MAGIC
+# MAGIC Serving config pins a concrete model *version* — it cannot follow a UC
+# MAGIC alias by itself. So promotion does both in the same breath: flip the
+# MAGIC alias (above) and roll the endpoint (here). Losing challengers never
+# MAGIC touch the endpoint, and if the endpoint does not exist yet (Phase 2 not
+# MAGIC deployed, or a fresh workspace) that is a note, not a failure.
+
+# COMMAND ----------
+
+if promoted:
+    try:
+        from databricks.sdk import WorkspaceClient
+        from databricks.sdk.service.serving import ServedEntityInput
+
+        w = WorkspaceClient()
+        current = w.serving_endpoints.get(endpoint_name)
+        serving_version = current.config.served_entities[0].entity_version
+        if serving_version == str(challenger_version):
+            print(f"endpoint {endpoint_name} already serves v{challenger_version}")
+        else:
+            w.serving_endpoints.update_config(
+                name=endpoint_name,
+                served_entities=[
+                    ServedEntityInput(
+                        name="rent-estimator",
+                        entity_name=MODEL_NAME,
+                        entity_version=str(challenger_version),
+                        workload_size="Small",
+                        scale_to_zero_enabled=True,
+                    )
+                ],
+            )
+            print(f"endpoint {endpoint_name}: rolling v{serving_version} -> v{challenger_version}")
+    except Exception as e:  # endpoint absent is expected before Phase 2 deploys
+        print(f"endpoint not updated ({type(e).__name__}): {e}")
+else:
+    print("no promotion — endpoint untouched")
