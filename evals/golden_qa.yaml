@@ -5,7 +5,9 @@
 # a grader spec, and an authoring_status. Only `confirmed` cases count
 # toward the benchmark verdict; `draft` cases run but are reported as
 # provisional. Candidate answers below were computed live on the warehouse
-# (2026-08-17, data through month 2026-07) and await user confirmation.
+# (2026-08-17, data through month 2026-07) and were confirmed in the s06
+# review — including the case-3 ruling that "currently" means the latest
+# month (an agent answering with a trailing-12-month window fails).
 #
 # Seed of 3 — one per gold table — proves the whole loop before the set
 # grows toward ~20 (ports from data-qa-agent, traps, refusals).
@@ -16,7 +18,7 @@ cases:
     question: What's the median weekly rent for a 2-bedroom unit in postcode 2000 right now?
     dataset: gold_property_rent
     tier: T1
-    authoring_status: draft
+    authoring_status: confirmed
     expectation: >-
       One value — the latest month's median weekly rent for postcode 2000,
       property_type unit, bedroom_band '2', with the basis month stated.
@@ -37,7 +39,7 @@ cases:
     question: Which postcodes had the highest average house sale price over the last 12 months?
     dataset: gold_property_sales
     tier: T3
-    authoring_status: draft
+    authoring_status: confirmed
     expectation: >-
       A ranked list of postcodes by average house sale price over the trailing
       12 months. Trap: the average must be re-aggregated as
@@ -68,7 +70,7 @@ cases:
     question: Which postcodes currently give the best gross rental yield for units?
     dataset: gold_property_yield
     tier: T2
-    authoring_status: draft
+    authoring_status: confirmed
     expectation: >-
       A latest-month ranking of postcodes by gross_yield_pct for units, with a
       volume floor on both sales and rentals so one-off sales don't dominate.
