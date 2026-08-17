@@ -72,13 +72,15 @@ def ask_langgraph(w, question: str) -> str:
     """Query the deployed agent endpoint; fall back to running the graph
     in-process (same code the endpoint serves) if the endpoint isn't ready."""
     try:
-        from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
-
-        response = w.serving_endpoints.query(
-            name=AGENT_ENDPOINT,
-            messages=[ChatMessage(role=ChatMessageRole.USER, content=question)],
+        # ChatAgent endpoints reply with {"messages": [...]} (not the
+        # chat-completions "choices" shape the SDK helper models), so hit
+        # the invocations API directly.
+        response = w.api_client.do(
+            "POST",
+            f"/serving-endpoints/{AGENT_ENDPOINT}/invocations",
+            body={"messages": [{"role": "user", "content": question}]},
         )
-        return response.choices[0].message.content
+        return response["messages"][-1]["content"]
     except Exception as exc:  # noqa: BLE001 — endpoint cold/missing, run locally
         print(f"    endpoint unavailable ({type(exc).__name__}); running graph locally")
         from lib.qa_agent import ask, make_databricks_agent

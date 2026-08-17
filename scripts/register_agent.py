@@ -33,7 +33,11 @@ ENDPOINT_NAME = "propertyiq-qa-agent"
 
 def log_and_register() -> str:
     from databricks.sdk import WorkspaceClient
-    from mlflow.models.resources import DatabricksServingEndpoint, DatabricksSQLWarehouse
+    from mlflow.models.resources import (
+        DatabricksServingEndpoint,
+        DatabricksSQLWarehouse,
+        DatabricksTable,
+    )
 
     user = WorkspaceClient().current_user.me().user_name
     mlflow.set_tracking_uri("databricks")
@@ -59,6 +63,12 @@ def log_and_register() -> str:
                     endpoint_name="databricks-meta-llama-3-3-70b-instruct"
                 ),
                 DatabricksSQLWarehouse(warehouse_id="7f9b6eb116a15acc"),
+                # The endpoint's service principal needs UC grants on the
+                # gold tables too — a declared warehouse alone yields
+                # INSUFFICIENT_PERMISSIONS (no USE SCHEMA) at query time.
+                DatabricksTable(table_name="workspace.propertyiq.gold_property_rent"),
+                DatabricksTable(table_name="workspace.propertyiq.gold_property_sales"),
+                DatabricksTable(table_name="workspace.propertyiq.gold_property_yield"),
             ],
             registered_model_name=MODEL_NAME,
         )
