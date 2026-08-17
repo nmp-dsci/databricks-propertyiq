@@ -59,9 +59,7 @@ def log_and_register() -> str:
             # served agent has no credentials for the LLM or the warehouse
             # ("default auth: cannot configure default credentials").
             resources=[
-                DatabricksServingEndpoint(
-                    endpoint_name="databricks-meta-llama-3-3-70b-instruct"
-                ),
+                DatabricksServingEndpoint(endpoint_name="databricks-meta-llama-3-3-70b-instruct"),
                 DatabricksSQLWarehouse(warehouse_id="7f9b6eb116a15acc"),
                 # The endpoint's service principal needs UC grants on the
                 # gold tables too — a declared warehouse alone yields
