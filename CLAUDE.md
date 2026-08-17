@@ -72,6 +72,8 @@ make run                         # run the job, logs stream to the terminal
 make ship                        # test -> deploy -> run
 make sql FILE=src/sql/01_explore.sql
 make pull-dashboard              # pull UI dashboard edits back into the repo
+make register-agent              # log + register the QA agent to UC, roll its endpoint
+make benchmark                   # run the 3-way QA benchmark (Genie / LangGraph / Data Pilot) locally
 ```
 
 Prefer `make ship` over calling `databricks` directly, so tests always run first.
@@ -96,6 +98,15 @@ The same discipline applies to `src/lib/ml_features.py`, `ml_model.py`,
 `ml_forecast.py` and `ml_monitoring.py` — pure functions, tested in
 `tests/test_ml_*.py`, imported by `src/notebooks/ml/*.py` for orchestration
 only.
+
+`src/lib/qa_agent.py` (the LangGraph QA agent) and `src/lib/agent_eval.py`
+(the benchmark's graders) follow the same pattern: the graph is
+dependency-injected (LLM callable, SQL executor) so `tests/test_qa_agent.py`
+and `tests/test_agent_eval.py` run it without a network call. Changing the
+grounding rules or a grader requires a corresponding golden case in
+`evals/golden_qa.yaml` and a re-run of `make benchmark` — do not tune a
+grader against a single agent's phrasing without checking the others still
+pass.
 
 ## When changing the dashboard
 
