@@ -33,6 +33,7 @@ ENDPOINT_NAME = "propertyiq-qa-agent"
 
 def log_and_register() -> str:
     from databricks.sdk import WorkspaceClient
+    from mlflow.models.resources import DatabricksServingEndpoint, DatabricksSQLWarehouse
 
     user = WorkspaceClient().current_user.me().user_name
     mlflow.set_tracking_uri("databricks")
@@ -48,6 +49,16 @@ def log_and_register() -> str:
                 "mlflow>=3.1",
                 "langgraph>=1.0",
                 "databricks-sdk>=0.68",
+            ],
+            # Declaring the resources is what lets agents.deploy() inject
+            # automatic auth into the serving container — without these the
+            # served agent has no credentials for the LLM or the warehouse
+            # ("default auth: cannot configure default credentials").
+            resources=[
+                DatabricksServingEndpoint(
+                    endpoint_name="databricks-meta-llama-3-3-70b-instruct"
+                ),
+                DatabricksSQLWarehouse(warehouse_id="7f9b6eb116a15acc"),
             ],
             registered_model_name=MODEL_NAME,
         )

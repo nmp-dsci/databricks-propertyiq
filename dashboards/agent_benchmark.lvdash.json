@@ -1,0 +1,252 @@
+{
+  "datasets": [
+    {
+      "name": "ds_summary",
+      "displayName": "Per-agent summary (latest run)",
+      "queryLines": [
+        "SELECT agent, COUNT(*) AS n_cases, ",
+        "       AVG(CASE WHEN passed THEN 1.0 ELSE 0.0 END) AS pass_rate, ",
+        "       ROUND(AVG(latency_s), 1) AS avg_latency_s ",
+        "FROM workspace.propertyiq_ml.agent_benchmark ",
+        "WHERE run_at = (SELECT max(run_at) FROM workspace.propertyiq_ml.agent_benchmark) ",
+        "GROUP BY agent"
+      ]
+    },
+    {
+      "name": "ds_tier",
+      "displayName": "Pass rate by agent and tier (latest run)",
+      "queryLines": [
+        "SELECT agent, tier, ",
+        "       AVG(CASE WHEN passed THEN 1.0 ELSE 0.0 END) AS pass_rate ",
+        "FROM workspace.propertyiq_ml.agent_benchmark ",
+        "WHERE run_at = (SELECT max(run_at) FROM workspace.propertyiq_ml.agent_benchmark) ",
+        "GROUP BY agent, tier"
+      ]
+    },
+    {
+      "name": "ds_detail",
+      "displayName": "Per-question answers (latest run)",
+      "queryLines": [
+        "SELECT case_key, tier, agent, ",
+        "       CASE WHEN passed THEN 'PASS' ELSE 'FAIL' END AS verdict, ",
+        "       latency_s, authoring_status, ",
+        "       substring(coalesce(nullif(error, ''), answer), 1, 400) AS answer_excerpt ",
+        "FROM workspace.propertyiq_ml.agent_benchmark ",
+        "WHERE run_at = (SELECT max(run_at) FROM workspace.propertyiq_ml.agent_benchmark) ",
+        "ORDER BY case_key, agent"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "page_verdict",
+      "displayName": "Verdict",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "title",
+            "multilineTextboxSpec": {"lines": ["## QA-agent benchmark — Genie vs LangGraph vs Data Pilot"]}
+          },
+          "position": {"x": 0, "y": 0, "width": 12, "height": 1}
+        },
+        {
+          "widget": {
+            "name": "subtitle",
+            "multilineTextboxSpec": {"lines": ["Same golden questions, three agents: the **Genie space** (ask it live from this workspace), the **LangGraph agent** served at `agents_workspace-propertyiq_ml-qa_agent`, and **Data Pilot** (data-qa-agent, local). Scored by the deterministic graders in `src/lib/agent_eval.py`; golden answers currently **draft** until confirmed."]}
+          },
+          "position": {"x": 0, "y": 1, "width": 12, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "score-genie",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "ds_summary",
+                "fields": [{"name": "pass_rate", "expression": "`pass_rate`"}],
+                "filters": [{"expression": "`agent` = 'genie'"}],
+                "disaggregated": true
+              }
+            }],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "pass_rate",
+                  "displayName": "Genie pass rate",
+                  "format": {"type": "number-percent", "decimalPlaces": {"type": "max", "places": 0}}
+                }
+              },
+              "frame": {"showTitle": true, "title": "Genie", "showDescription": true, "description": "Managed NL-to-SQL space"}
+            }
+          },
+          "position": {"x": 0, "y": 3, "width": 4, "height": 3}
+        },
+        {
+          "widget": {
+            "name": "score-langgraph",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "ds_summary",
+                "fields": [{"name": "pass_rate", "expression": "`pass_rate`"}],
+                "filters": [{"expression": "`agent` = 'langgraph'"}],
+                "disaggregated": true
+              }
+            }],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "pass_rate",
+                  "displayName": "LangGraph pass rate",
+                  "format": {"type": "number-percent", "decimalPlaces": {"type": "max", "places": 0}}
+                }
+              },
+              "frame": {"showTitle": true, "title": "LangGraph agent", "showDescription": true, "description": "Data Pilot's graph ported to UC + warehouse"}
+            }
+          },
+          "position": {"x": 4, "y": 3, "width": 4, "height": 3}
+        },
+        {
+          "widget": {
+            "name": "score-data-pilot",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "ds_summary",
+                "fields": [{"name": "pass_rate", "expression": "`pass_rate`"}],
+                "filters": [{"expression": "`agent` = 'data_pilot'"}],
+                "disaggregated": true
+              }
+            }],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "pass_rate",
+                  "displayName": "Data Pilot pass rate",
+                  "format": {"type": "number-percent", "decimalPlaces": {"type": "max", "places": 0}}
+                }
+              },
+              "frame": {"showTitle": true, "title": "Data Pilot", "showDescription": true, "description": "data-qa-agent on Postgres (data trails gold by ~2 months)"}
+            }
+          },
+          "position": {"x": 8, "y": 3, "width": 4, "height": 3}
+        },
+        {
+          "widget": {
+            "name": "pass-by-tier",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "ds_tier",
+                "fields": [
+                  {"name": "tier", "expression": "`tier`"},
+                  {"name": "agent", "expression": "`agent`"},
+                  {"name": "avg(pass_rate)", "expression": "AVG(`pass_rate`)"}
+                ],
+                "disaggregated": false
+              }
+            }],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {"fieldName": "tier", "scale": {"type": "categorical", "sort": {"by": "custom-order", "orderedValues": ["T1", "T2", "T3", "T4"]}}, "displayName": "Tier"},
+                "y": {"fieldName": "avg(pass_rate)", "scale": {"type": "quantitative"}, "displayName": "Pass rate", "format": {"type": "number-percent", "decimalPlaces": {"type": "max", "places": 0}}},
+                "color": {"fieldName": "agent", "scale": {"type": "categorical"}, "displayName": "Agent"}
+              },
+              "mark": {"layout": "group"},
+              "frame": {"showTitle": true, "title": "Pass rate by question tier", "showDescription": true, "description": "T1 lookup, T2 trend, T3 trap, T4 refusal"}
+            }
+          },
+          "position": {"x": 0, "y": 6, "width": 7, "height": 6}
+        },
+        {
+          "widget": {
+            "name": "latency-by-agent",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "ds_summary",
+                "fields": [
+                  {"name": "agent", "expression": "`agent`"},
+                  {"name": "avg(avg_latency_s)", "expression": "AVG(`avg_latency_s`)"}
+                ],
+                "disaggregated": false
+              }
+            }],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {"fieldName": "avg(avg_latency_s)", "scale": {"type": "quantitative"}, "displayName": "Avg latency (s)"},
+                "y": {"fieldName": "agent", "scale": {"type": "categorical"}, "displayName": "Agent"}
+              },
+              "frame": {"showTitle": true, "title": "Average answer latency", "showDescription": true, "description": "Wall-clock per question, includes cold starts"}
+            }
+          },
+          "position": {"x": 7, "y": 6, "width": 5, "height": 6}
+        },
+        {
+          "widget": {
+            "name": "answer-detail",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "ds_detail",
+                "fields": [
+                  {"name": "case_key", "expression": "`case_key`"},
+                  {"name": "tier", "expression": "`tier`"},
+                  {"name": "agent", "expression": "`agent`"},
+                  {"name": "verdict", "expression": "`verdict`"},
+                  {"name": "latency_s", "expression": "`latency_s`"},
+                  {"name": "answer_excerpt", "expression": "`answer_excerpt`"}
+                ],
+                "disaggregated": true
+              }
+            }],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {"fieldName": "case_key", "displayName": "Case"},
+                  {"fieldName": "tier", "displayName": "Tier"},
+                  {"fieldName": "agent", "displayName": "Agent"},
+                  {"fieldName": "verdict", "displayName": "Verdict",
+                   "style": {"type": "basic", "rules": [
+                     {"condition": {"operand": {"type": "data-value", "value": "PASS"}, "operator": "="},
+                      "backgroundColor": {"themeColorType": "visualizationColors", "position": 2}},
+                     {"condition": {"operand": {"type": "data-value", "value": "FAIL"}, "operator": "="},
+                      "backgroundColor": {"themeColorType": "visualizationColors", "position": 4}}
+                   ]}},
+                  {"fieldName": "latency_s", "displayName": "Latency (s)"},
+                  {"fieldName": "answer_excerpt", "displayName": "Answer (excerpt)"}
+                ]
+              },
+              "frame": {"showTitle": true, "title": "Every answer, side by side", "showDescription": true, "description": "Latest run; errors shown in place of answers when an agent failed outright"}
+            }
+          },
+          "position": {"x": 0, "y": 12, "width": 12, "height": 8}
+        }
+      ]
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "canvasBackgroundColor": {"light": "#FCFCFC", "dark": "#1F272D"},
+      "widgetBackgroundColor": {"light": "#FFFFFF", "dark": "#11171C"},
+      "widgetBorderColor": {"light": "#FFFFFF", "dark": "#11171C"},
+      "fontColor": {"light": "#11171C", "dark": "#E8ECF0"},
+      "selectionColor": {"light": "#2272B4", "dark": "#8ACAFF"},
+      "visualizationColors": ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#D55E00", "#56B4E9", "#F0E442"],
+      "widgetHeaderAlignment": "LEFT"
+    }
+  }
+}

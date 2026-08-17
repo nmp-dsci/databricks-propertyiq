@@ -1,0 +1,10 @@
+resources:
+  dashboards:
+    agent_benchmark:
+      display_name: PropertyIQ Agent Benchmark
+      file_path: ../../dashboards/agent_benchmark.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      # Same round-trip contract as property_overview: deploy pushes this
+      # JSON, UI edits come back via `bundle generate dashboard`, and
+      # embed_credentials=false keeps a UI edit from being clobbered silently.
+      embed_credentials: false
