@@ -108,11 +108,14 @@ Dashboards are miserable to hand-edit as JSON and excellent to edit in the UI, s
 the workflow is a round-trip:
 
 ```bash
-make deploy           # 1. push dashboards/property_overview.lvdash.json
+make deploy           # 1. push both dashboards/*.lvdash.json
                       # 2. rearrange / restyle in the Databricks UI
-make pull-dashboard   # 3. write the UI version back into the repo
+make pull-dashboard   # 3. write the UI version of both back into the repo
 git commit            # 4. it's code again
 ```
+
+`pull-dashboard` loops over both dashboard resources — `property_overview` and
+`agent_benchmark` — so a UI edit to either one round-trips the same way.
 
 `embed_credentials: false` in the resource means a deploy **errors** rather than
 silently overwriting UI edits you forgot to pull.

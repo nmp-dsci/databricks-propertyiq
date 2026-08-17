@@ -70,7 +70,9 @@ benchmark: ## Run the 3-way QA benchmark (Genie / LangGraph / Data Pilot) locall
 
 .PHONY: pull-dashboard
 pull-dashboard: ## Pull UI edits back into dashboards/*.lvdash.json before committing
-	@$(DB) bundle generate dashboard --resource property_overview -t $(TARGET) --force
+	@for resource in property_overview agent_benchmark; do \
+		$(DB) bundle generate dashboard --resource $$resource -t $(TARGET) --force; \
+	done
 
 .PHONY: summary
 summary: ## Print deployed resource URLs
