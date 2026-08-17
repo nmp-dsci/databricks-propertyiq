@@ -165,11 +165,20 @@ def run(agents: list[str], dry_run: bool) -> list[dict]:
     return results
 
 
-def _sql_str(value: str) -> str:
-    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+def _execute(w, statement: str, parameters: list | None = None) -> None:
+    result = w.statement_execution.execute_statement(
+        warehouse_id=WAREHOUSE_ID, statement=statement, parameters=parameters, wait_timeout="50s"
+    )
+    deadline = time.time() + 300
+    while result.status.state.value in ("PENDING", "RUNNING") and time.time() < deadline:
+        time.sleep(5)
+        result = w.statement_execution.get_statement(result.statement_id)
+    assert result.status.state.value == "SUCCEEDED", result.status
 
 
 def write_results(w, results: list[dict]) -> None:
+    from databricks.sdk.service.sql import StatementParameterListItem as Param
+
     ddl = f"""
         CREATE TABLE IF NOT EXISTS {RESULTS_TABLE} (
           run_at STRING, case_key STRING, tier STRING, question STRING,
@@ -180,34 +189,29 @@ def write_results(w, results: list[dict]) -> None:
         per run. passed comes from the deterministic graders in
         src/lib/agent_eval.py; only confirmed cases count toward the verdict.'
     """
-    rows = ", ".join(
-        "({})".format(
-            ", ".join(
-                [
-                    _sql_str(r["run_at"]),
-                    _sql_str(r["case_key"]),
-                    _sql_str(r["tier"]),
-                    _sql_str(r["question"]),
-                    _sql_str(r["agent"]),
-                    _sql_str(r["answer"]),
-                    "true" if r["passed"] else "false",
-                    str(r["latency_s"]),
-                    _sql_str(r["authoring_status"]),
-                    _sql_str(r["error"]),
-                ]
-            )
+    _execute(w, ddl)
+    insert = f"""
+        INSERT INTO {RESULTS_TABLE} VALUES
+        (:run_at, :case_key, :tier, :question, :agent, :answer, :passed, :latency_s,
+         :authoring_status, :error)
+    """
+    for r in results:
+        _execute(
+            w,
+            insert,
+            parameters=[
+                Param(name="run_at", value=r["run_at"]),
+                Param(name="case_key", value=r["case_key"]),
+                Param(name="tier", value=r["tier"]),
+                Param(name="question", value=r["question"]),
+                Param(name="agent", value=r["agent"]),
+                Param(name="answer", value=r["answer"]),
+                Param(name="passed", value="true" if r["passed"] else "false", type="BOOLEAN"),
+                Param(name="latency_s", value=str(r["latency_s"]), type="DOUBLE"),
+                Param(name="authoring_status", value=r["authoring_status"]),
+                Param(name="error", value=r["error"]),
+            ],
         )
-        for r in results
-    )
-    for statement in (ddl, f"INSERT INTO {RESULTS_TABLE} VALUES {rows}"):
-        result = w.statement_execution.execute_statement(
-            warehouse_id=WAREHOUSE_ID, statement=statement, wait_timeout="50s"
-        )
-        deadline = time.time() + 300
-        while result.status.state.value in ("PENDING", "RUNNING") and time.time() < deadline:
-            time.sleep(5)
-            result = w.statement_execution.get_statement(result.statement_id)
-        assert result.status.state.value == "SUCCEEDED", result.status
     print(f"\nwrote {len(results)} rows to {RESULTS_TABLE}")
 
 

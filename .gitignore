@@ -28,6 +28,10 @@ data/
 *.csv
 !tests/fixtures/*.csv
 
+# MLflow local tracking artifacts
+mlflow.db
+mlruns/
+
 # Editors / OS
 .DS_Store
 .idea/
