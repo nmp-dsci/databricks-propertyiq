@@ -60,6 +60,14 @@ sync: ## Live-sync this folder to the workspace on every save (leave running)
 sql: ## Run a .sql file on the serverless warehouse. Usage: make sql FILE=src/sql/01_explore.sql
 	@uv run python scripts/run_sql.py $(FILE)
 
+.PHONY: register-agent
+register-agent: ## Log + register the QA agent to UC and roll its endpoint
+	@uv run python scripts/register_agent.py
+
+.PHONY: benchmark
+benchmark: ## Run the 3-way QA benchmark (Genie / LangGraph / Data Pilot) locally
+	@uv run python scripts/run_benchmark.py
+
 .PHONY: pull-dashboard
 pull-dashboard: ## Pull UI edits back into dashboards/*.lvdash.json before committing
 	@$(DB) bundle generate dashboard --resource property_overview -t $(TARGET) --force

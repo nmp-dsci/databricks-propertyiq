@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PropertyIQ QA agents — Genie vs LangGraph vs Data Pilot</title>
+<script>
+  (function(){
+    var t; try{t=localStorage.getItem('s05-theme')}catch(e){}
+    var mq=window.matchMedia('(prefers-color-scheme: dark)');
+    if(t!=='light'&&t!=='dark'){t=mq.matches?'dark':'light'}
+    document.documentElement.setAttribute('data-theme',t);
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#F4F6F3; --panel:#FFFFFF; --panel-2:#FAFBF9; --ink:#14181C; --ink-soft:#3E4A44;
+  --muted:#5A655D; --faint:#77837A; --line:#DDE4DC; --line-2:#C9D2C9;
+  --signal:#17876B; --signal-soft:#E4F1EC; --amber:#B26A12; --amber-soft:#F6ECDC;
+  --fail:#A8402F; --fail-soft:#F4E2DE; --brick:#C2410C; --brick-soft:#F7E7DC;
+  --chip-bg:#E4F1EC; --chip-ink:#11674F; --hover:#FAFBF9;
+  --nav-bg:rgba(244,246,243,.85); --grid-line:rgba(16,22,19,.028);
+  --hero-glow:rgba(23,135,107,.07); --pre-bg:#14181C; --pre-ink:#E8ECE9;
+  --shadow:0 1px 2px rgba(16,22,19,.04),0 10px 26px -14px rgba(16,22,19,.16);
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --w:1120px;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#101511; --panel:#171E19; --panel-2:#1C2420; --ink:#E8EDE9; --ink-soft:#C3CCC5;
+  --muted:#96A29A; --faint:#71807A; --line:#242E27; --line-2:#33413A;
+  --signal:#43C29A; --signal-soft:#173428; --amber:#D19243; --amber-soft:#2A2113;
+  --fail:#E0715C; --fail-soft:#2E1A16; --brick:#E8935B; --brick-soft:#2C1D12;
+  --chip-bg:#173428; --chip-ink:#7FDDBB; --hover:#1C2420;
+  --nav-bg:rgba(16,21,17,.85); --grid-line:rgba(232,237,233,.035);
+  --hero-glow:rgba(67,194,154,.09); --pre-bg:#0B0F0C; --pre-ink:#DEE5E0;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 10px 26px -14px rgba(0,0,0,.55);
+}
+*,*::before,*::after{box-sizing:border-box;min-width:0}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.62;letter-spacing:-.005em;
+  background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:34px 34px;transition:background-color .2s,color .2s}
+a{color:var(--signal);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:3px}
+h1,h2,h3,h4{font-weight:600;letter-spacing:-.02em;line-height:1.2;margin:0}
+:where(p,h1,h2,h3,h4,li,td,th,summary,label,button){overflow-wrap:anywhere}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 12px}
+.nav{position:sticky;top:0;z-index:50;background:var(--nav-bg);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav-inner{max-width:var(--w);margin:0 auto;padding:11px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px;color:var(--ink)}
+.brand b{font-size:15px;font-weight:600}
+.brand span{font-family:var(--mono);font-size:12px;color:var(--faint)}
+.nav-links{display:flex;gap:16px;flex-wrap:wrap;font-size:13.5px}
+.nav-links a{color:var(--muted)}
+.theme-btn{border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:8px;padding:5px 10px;font-family:var(--mono);font-size:12px;cursor:pointer}
+main{max-width:var(--w);margin:0 auto;padding:30px 22px 90px}
+section{margin-top:52px}
+.hero{padding:38px 0 6px;background:radial-gradient(700px 260px at 20% 0%,var(--hero-glow),transparent)}
+.hero h1{font-size:clamp(26px,4vw,38px);max-width:23ch}
+.hero p.lede{font-size:17.5px;color:var(--ink-soft);max-width:78ch;margin:16px 0 0}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip-bg);color:var(--chip-ink);border-radius:999px;padding:3px 12px;font-family:var(--mono);font-size:12px;font-weight:500}
+.chip.warn{background:var(--amber-soft);color:var(--amber)}
+.chip.risk{background:var(--fail-soft);color:var(--fail)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:22px 24px}
+.card h2{font-size:21px;margin-bottom:6px}
+.card h3{font-size:16px}
+.grid{display:grid;gap:16px}
+.grid-3{grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+.grid-2{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.sub{color:var(--muted);font-size:14.5px;margin:4px 0 0}
+p{margin:10px 0}
+ul,ol{margin:10px 0;padding-left:22px}
+li{margin:5px 0}
+code{font-family:var(--mono);font-size:.88em;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+pre{background:var(--pre-bg);color:var(--pre-ink);border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:12.8px;line-height:1.6}
+pre code{background:none;border:none;padding:0;color:inherit}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line-2)}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.tag{display:inline-block;font-family:var(--mono);font-size:11px;border-radius:5px;padding:1px 7px;font-weight:500;white-space:nowrap}
+.tag.ok{background:var(--signal-soft);color:var(--signal)}
+.tag.warn{background:var(--amber-soft);color:var(--amber)}
+.tag.risk{background:var(--fail-soft);color:var(--fail)}
+.tag.dim{background:var(--panel-2);color:var(--muted);border:1px solid var(--line)}
+.opt{border:1px solid var(--line);border-radius:12px;padding:18px 20px;background:var(--panel);display:flex;flex-direction:column;gap:8px}
+.opt .head{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.opt .head h3{font-size:17px}
+.opt .meta{font-family:var(--mono);font-size:12px;color:var(--faint)}
+.kv{display:grid;grid-template-columns:110px minmax(0,1fr);gap:4px 12px;font-size:13.8px;margin-top:4px}
+.kv dt{color:var(--faint);font-family:var(--mono);font-size:12px;padding-top:2px}
+.kv dd{margin:0;color:var(--ink-soft)}
+.callout{border-left:3px solid var(--signal);background:var(--signal-soft);border-radius:0 10px 10px 0;padding:12px 16px;font-size:14.5px;color:var(--ink-soft)}
+.callout.warn{border-color:var(--amber);background:var(--amber-soft)}
+.callout.risk{border-color:var(--fail);background:var(--fail-soft)}
+.phase{display:grid;grid-template-columns:44px minmax(0,1fr);gap:16px;margin-top:18px}
+.phase-num{width:38px;height:38px;border-radius:10px;background:var(--signal-soft);color:var(--signal);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:600;font-size:15px}
+.phase h3{font-size:17px;margin-bottom:4px}
+.checks{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-top:10px;font-size:13.8px}
+.checks b{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);display:block;margin-bottom:6px}
+.mermaid-wrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+.q-form{background:var(--panel);border:1px solid var(--line-2);border-radius:12px;padding:18px 20px;margin-top:14px}
+.q-form h3{font-size:16px;margin-bottom:6px}
+.q-form label{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:9px;margin-top:8px;cursor:pointer;font-size:14.5px}
+.q-form label:hover{background:var(--hover)}
+.q-form input{margin-top:4px}
+.q-form .opt-note{color:var(--muted);font-size:13px;display:block}
+.q-form button{margin-top:12px;background:var(--signal);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:var(--sans);font-size:14px;font-weight:600;cursor:pointer}
+.q-form button:hover{filter:brightness(1.08)}
+.q-form .queued{display:none;margin-left:10px;font-family:var(--mono);font-size:12px;color:var(--signal)}
+.q-form.is-queued .queued{display:inline}
+footer{margin-top:70px;color:var(--faint);font-size:13px;font-family:var(--mono)}
+@media (max-width:640px){.kv{grid-template-columns:1fr}.phase{grid-template-columns:1fr}.phase-num{width:32px;height:32px}}
+</style>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <div class="brand"><b>PropertyIQ · s05</b><span>QA-agent benchmark plan</span></div>
+  <div class="nav-links">
+    <a href="#goal">Goal</a><a href="#contenders">Contenders</a><a href="#arch">Architecture</a>
+    <a href="#golden">Golden set</a><a href="#surfaces">Output surfaces</a><a href="#phases">Phases</a>
+    <a href="#risks">Risks</a><a href="#decisions">Decisions</a>
+  </div>
+  <button class="theme-btn" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('s05-theme',n)}catch(e){};renderMermaid()">theme</button>
+</div></nav>
+
+<main>
+<div class="hero">
+  <p class="kicker">agent_bench · branch plan</p>
+  <h1>One golden set, three QA agents: Genie vs LangGraph vs Data Pilot</h1>
+  <p class="lede">Ask the <b>same question across three sources</b> — the managed <b>Genie space</b>, a <b>LangGraph agent on Databricks</b>, and the existing <b>Data Pilot</b> chat in <code>data-qa-agent</code> — and compare the answers against one golden set. The LangGraph agent is deliberately a <b>port of Data Pilot's data-agent</b>: same stages, same report shape (a number with a basis, a trend, a caveat), but grounded in the Unity Catalog gold tables instead of the dbt manifest, executing on the warehouse instead of Postgres. The verdict lands as an AI/BI dashboard.</p>
+  <div class="badges">
+    <span class="chip">Genie space live · 01f197b4…</span>
+    <span class="chip">gold_property_rent / _sales / _yield</span>
+    <span class="chip warn">golden answers: DRAFT — not confirmed</span>
+    <span class="chip risk">agents.deploy on Free Edition: unverified</span>
+  </div>
+</div>
+
+<section id="goal" class="card">
+  <h2>Current state → desired behavior</h2>
+  <div class="grid grid-2" style="margin-top:12px">
+    <div>
+      <h3>Today</h3>
+      <ul>
+        <li><b>Genie space</b> is live over the gold tables with grounding instructions (re-aggregate additive legs, volume floors, no suburb join between rent and sales). Chat exists in the Databricks UI only.</li>
+        <li><b>data-qa-agent</b> ("Data Pilot") runs locally: login → chat → NL→SQL over <code>marts.property_rent/_sales</code> in Postgres → report with KPIs, trend chart, insights. It has an eval-case format (<code>evals/cases/*.yaml</code>: question, tier, <code>golden_sql</code>, grader, <code>authoring_status</code>) covering the <em>same NSW datasets</em>.</li>
+        <li>No LangGraph agent exists yet; no cross-agent comparison exists anywhere.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>After this branch</h3>
+      <ul>
+        <li>A <b>LangGraph agent</b> answers the same questions on Databricks — grounded in the gold tables, registered in Unity Catalog, callable as an endpoint.</li>
+        <li>A <b>golden set of ~20 questions</b> (ported from data-qa-agent's eval cases + Databricks-specific traps) with <b>confirmed</b> reference answers computed by deterministic SQL.</li>
+        <li>A benchmark harness runs Genie, LangGraph, and Data Pilot over the set and writes <code>propertyiq_ml.agent_benchmark</code>.</li>
+        <li>An <b>AI/BI dashboard</b> shows the verdict (accuracy, groundedness, latency per agent) with the Genie space linked for live "ask the data" chat — the Databricks replica of the Data Pilot experience.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:14px">The deliverable is the <b>comparison, not any single agent</b> — same shape as the s03 forecast bake-off: one honest harness, identical inputs, a verdict table an interviewer can read in ten seconds.</div>
+</section>
+
+<section id="contenders">
+  <p class="kicker">the decision surface</p>
+  <h2 style="font-size:22px">Three contenders, one question set</h2>
+  <div class="grid grid-3" style="margin-top:16px">
+    <div class="opt">
+      <div class="head"><h3>A · Genie space</h3><span class="tag ok">exists</span></div>
+      <p class="sub">Databricks-managed NL→SQL, grounded by curated instructions on the space.</p>
+      <dl class="kv">
+        <dt>build cost</dt><dd>None — already live. Harness drives it via the Genie Conversations API (poll message → read query attachment + result).</dd>
+        <dt>strengths</dt><dd>Zero code, UC-governed, instructions already encode the trap rules (additive re-aggregation, volume floor, no suburb join).</dd>
+        <dt>weaknesses</dt><dd>Answers stop at SQL + table; no narrative insight, no chart choice, no multi-step reasoning. Instructions live workspace-side, not in git.</dd>
+        <dt>surface</dt><dd>Genie chat UI; embeddable as "Ask Genie" on the AI/BI dashboard.</dd>
+      </dl>
+    </div>
+    <div class="opt">
+      <div class="head"><h3>B · LangGraph agent</h3><span class="tag warn">build</span></div>
+      <p class="sub"><b>A port of Data Pilot's data-agent to Databricks</b>: same stages and report shape, re-grounded on the catalog instead of dbt.</p>
+      <dl class="kv">
+        <dt>build cost</dt><dd>The core of this branch. <code>ChatDatabricks</code> on FMAPI (llama-3.3-70b — proven live via <code>ai_query</code>); the pipeline copies data-qa-agent's agent design, swapping dbt-manifest grounding for UC schemas + table comments and Postgres execution for the warehouse (see the port map below).</dd>
+        <dt>strengths</dt><dd>Full parity ambition with Data Pilot: decision log, retries, insight phrasing, KPI + trend report — a direct apples-to-apples of "same agent, dbt/Postgres vs Unity Catalog/Delta". Logged with MLflow models-from-code as a <code>ChatAgent</code> → UC registry → served endpoint.</dd>
+        <dt>weaknesses</dt><dd>Everything Genie gives for free must be earned: SQL safety, governance, prompt-injection posture. <code>agents.deploy()</code> unverified on Free Edition (fallback: plain CPU serving of the ChatAgent, proven in s03).</dd>
+        <dt>surface</dt><dd>Serving endpoint → callable from SQL (<code>ai_query</code>), notebooks, or a chat app.</dd>
+      </dl>
+    </div>
+    <div class="opt">
+      <div class="head"><h3>C · Data Pilot</h3><span class="tag ok">exists</span></div>
+      <p class="sub">The <code>data-qa-agent</code> stack — the UX target, running on the same NSW data in Postgres.</p>
+      <dl class="kv">
+        <dt>build cost</dt><dd>None to build; <code>make up</code> + <code>make pipeline-full</code> locally, then drive <code>/ask</code> over HTTP with the same questions.</dd>
+        <dt>strengths</dt><dd>Richest answers today: KPIs + trend chart + written insights + decision log, under RLS. It is the bar the Databricks agents must reach.</dd>
+        <dt>weaknesses</dt><dd>Different engine (Postgres marts vs Delta gold) — golden answers must be checked to match across both, or scored with tolerance. Not on Databricks, so it's the external yardstick, not a deployable.</dd>
+        <dt>surface</dt><dd>Its own chat UI at <code>localhost:5230</code>.</dd>
+      </dl>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:14px"><b>Decided (D1):</b> the line-up is exactly these three — Genie, LangGraph, Data Pilot. No naive-baseline calibration floor.</div>
+</section>
+
+<section id="arch">
+  <p class="kicker">how it fits together</p>
+  <h2 style="font-size:22px">Benchmark architecture</h2>
+  <div class="mermaid-wrap" style="margin-top:14px">
+    <pre class="mermaid" id="arch-diagram">
+flowchart TD
+  G["golden set<br/>evals/golden_qa.yaml<br/>~20 questions + golden SQL"] --> CONF["confirm answers<br/>deterministic SQL on warehouse<br/>status: draft → confirmed"]
+  CONF --> H["benchmark harness — runs LOCALLY<br/>(only the laptop can reach all three)<br/>scripts/run_benchmark.py"]
+  H --> A1["A · Genie space<br/>Conversations API"]
+  H --> A2["B · LangGraph agent<br/>serving endpoint"]
+  H --> A3["C · Data Pilot<br/>local /ask HTTP"]
+  A1 --> R["answers + SQL + latency<br/>per agent per question"]
+  A2 --> R
+  A3 --> R
+  R --> E["scoring<br/>deterministic graders vs confirmed answers<br/>+ mlflow.genai.evaluate LLM judges"]
+  E --> T[("workspace.propertyiq_ml.agent_benchmark")]
+  T --> D["AI/BI dashboard: verdict<br/>+ Ask Genie linked"]
+    </pre>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3>How each contender gets deployed</h3>
+    <div class="table-wrap" style="margin-top:10px"><table>
+      <thead><tr><th>Contender</th><th>Lives in this repo?</th><th>Deploy path</th></tr></thead>
+      <tbody>
+        <tr><td><b>LangGraph agent</b></td><td><span class="tag ok">yes — fully</span></td><td>Same loop as everything else in the repo: <code>src/lib/qa_agent.py</code> + <code>src/notebooks/agent/01_log_register.py</code> + <code>02_deploy.py</code> + <code>resources/jobs/agent_bench.yml</code> → <code>databricks bundle deploy</code> uploads the snapshot → <code>bundle run</code> executes the job → MLflow logs the model (models-from-code), registers it to <code>propertyiq_ml.qa_agent</code> in UC → the deploy step points the serving endpoint at the new version. Code change → redeploy → new model version → endpoint rolls, exactly like the s03 rent estimator.</td></tr>
+        <tr><td><b>Genie space</b></td><td><span class="tag warn">config only</span></td><td>Genie is <b>not a bundle resource</b> — it can't be deployed from code. The space already exists (created once via API). What the repo holds is its <em>configuration</em>: a script (<code>make genie-push</code>) that pushes the curated tables + grounding instructions to the space via the Genie API, so the rules are versioned in git even though the object itself is workspace-managed.</td></tr>
+        <tr><td><b>Data Pilot</b></td><td><span class="tag dim">separate repo</span></td><td>Not deployed anywhere — it's the <code>data-qa-agent</code> repo running locally via <code>make up</code>. This repo only calls its <code>/ask</code> API during the benchmark.</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <div class="grid grid-2" style="margin-top:16px">
+    <div class="card">
+      <h3>Option B = Data Pilot's agent, ported piece by piece</h3>
+      <p class="sub" style="margin-bottom:8px">Same graph as data-qa-agent's data-agent — route → plan_sql → execute → reflect → answer (decision log throughout) — with each dependency swapped for its Databricks equivalent:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Data Pilot (dbt/Postgres)</th><th>Databricks port (UC/Delta)</th></tr></thead>
+        <tbody>
+          <tr><td>Grounding: dbt manifest (models, columns, docs)</td><td>UC <code>information_schema</code> + the table/column <code>COMMENT</code>s already on the gold tables</td></tr>
+          <tr><td>Execution: read-only SELECT on Postgres marts</td><td>Statement Execution API on warehouse <code>7f9b6eb116a15acc</code>, same SELECT-only guardrail</td></tr>
+          <tr><td>Governance: Postgres RLS per user</td><td>UC table grants (single-user Free Edition — noted, not replicated)</td></tr>
+          <tr><td>Report: <code>skills.build_report</code> — KPIs + trend chart + insight text</td><td>Same report shape in the answer payload (KPIs, basis month, caveat, chart spec)</td></tr>
+          <tr><td>pgvector personalization memory</td><td>Out of scope for the benchmark (would confound the comparison)</td></tr>
+        </tbody>
+      </table></div>
+      <p class="sub">Packaged as an MLflow <code>ChatAgent</code> (models-from-code), registered to <code>workspace.propertyiq_ml.qa_agent</code>, served like the rent estimator in s03.</p>
+    </div>
+    <div class="card">
+      <h3>Scoring — two layers, same as data-qa-agent's graders</h3>
+      <ul style="font-size:14.5px">
+        <li><b>Deterministic (primary):</b> did the answer contain the confirmed value within tolerance (5%)? For list questions: set overlap on the top-k. For traps: did it apply the rule (re-aggregate, floor, refuse)?</li>
+        <li><b>LLM judge (secondary):</b> <code>mlflow.genai.evaluate</code> with groundedness + relevance judges on FMAPI — catches confident-but-wrong prose the value-check misses.</li>
+        <li><b>Operational:</b> wall-clock latency and answer length per agent.</li>
+      </ul>
+      <p class="sub">Deterministic scores decide the verdict; judge scores annotate it. A benchmark where the judge alone decides is a vibe, not a measurement.</p>
+    </div>
+  </div>
+</section>
+
+<section id="golden" class="card">
+  <h2>The golden set — drafted, not yet confirmed</h2>
+  <p><b>Start with a seed of 3 questions — one per gold table</b> — take those all the way through the loop (confirm → run all agents → score → dashboard), then grow the set toward ~20. A thin end-to-end slice first proves the harness before any authoring effort is sunk into questions.</p>
+  <div class="table-wrap" style="margin-top:10px">
+    <table>
+      <thead><tr><th>#</th><th>Table</th><th>Seed question</th><th>Golden answer basis</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><code>gold_property_rent</code></td><td>"What's the median weekly rent for a 2-bedroom unit in postcode 2000 right now?"</td><td>Direct lookup: latest month, postcode 2000, unit, band '2' (ported from data-qa-agent's T1 case).</td></tr>
+        <tr><td>2</td><td><code>gold_property_sales</code></td><td>"Which postcodes had the highest average house sale price over the last 12 months?"</td><td>Trap built in: must re-aggregate <code>sum(total_sale_value)/sum(n_sold)</code> and apply a volume floor.</td></tr>
+        <tr><td>3</td><td><code>gold_property_yield</code></td><td>"Which postcodes currently give the best gross rental yield for units?"</td><td>Latest-month ranking from the yield mart — tests whether agents find/derive yield correctly.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="margin-top:14px">The full set then grows to ~20 in <code>evals/golden_qa.yaml</code> (same shape as data-qa-agent's cases: question, tier, <code>golden_sql</code>, expectation, <code>authoring_status</code>): ported from <code>data-qa-agent/evals/cases/</code> (nsw_rent, nsw_sales, nsw_yield — re-grounded from <code>marts.*</code> to the gold tables), plus trap questions and refusal checks:</p>
+  <div class="table-wrap" style="margin-top:10px">
+    <table>
+      <thead><tr><th>Tier</th><th>Count</th><th>Example</th><th>What it tests</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag ok">T1 lookup</span></td><td>6</td><td>"Median weekly rent for a 2-bed unit in postcode 2000 right now?"</td><td>Point accuracy: correct filter, correct latest month.</td></tr>
+        <tr><td><span class="tag ok">T2 trend</span></td><td>6</td><td>"How has average rent in 2145 moved since 2020?" / "Rent trends 2077 vs 2076"</td><td>Time-series handling, correct aggregation over months.</td></tr>
+        <tr><td><span class="tag warn">T3 trap</span></td><td>5</td><td>"Average weekly rent across all postcodes" (must re-aggregate <code>sum(total)/sum(n)</code>, not avg of avgs) · "Fastest-growing postcodes" (must apply n_rented floor) · "Rent vs sale price by suburb" (rent gold has no suburb — must join on postcode or decline)</td><td>Whether grounding rules actually bind. This is where Genie's instructions, the LangGraph prompt, and the naive baseline separate.</td></tr>
+        <tr><td><span class="tag risk">T4 refusal</span></td><td>3</td><td>"Which agent sold the most houses?" (no such data) · "Predict rent for 2030"</td><td>Honest refusal vs hallucinated answer.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout warn" style="margin-top:14px">
+    <b>Confirmation is a blocking step (Phase 1), and it's yours — via an s06 review page (decided, D3).</b> Every question ships with a <code>golden_sql</code> that I run against the gold tables on the warehouse; the computed values become the candidate answers with <code>authoring_status: draft</code>. I'll bring the question × candidate-answer table back as an s06 lavish page with per-row confirm/edit controls (mirroring data-qa-agent's Golden Examples authoring page) — only <b>confirmed</b> rows count toward the verdict. Data Pilot's Postgres marts are checked against the same values; where the two platforms legitimately disagree (load-window differences), the case records a per-case tolerance or is dropped.
+  </div>
+</section>
+
+<section id="surfaces" class="card">
+  <h2>Output surfaces — replicating Data Pilot on Databricks</h2>
+  <div class="grid grid-2" style="margin-top:12px">
+    <div>
+      <h3>1 · Benchmark verdict dashboard <span class="tag ok">committed</span></h3>
+      <p style="font-size:14.5px">An AI/BI dashboard (deployed via the bundle, like the existing PropertyIQ dashboard) over <code>agent_benchmark</code>: score by agent × tier (grouped bar), accuracy vs latency (scatter), per-question detail table with each agent's answer side by side, and KPI counters (overall accuracy per agent). The Genie space is linked on the dashboard, so a viewer can pivot from "the verdict" to "ask the data yourself" — chat and dashboard on one surface, which is the closest native equivalent of Data Pilot's chat-plus-report page.</p>
+    </div>
+    <div>
+      <h3>2 · Chat over the LangGraph agent <span class="tag ok">decided (D2)</span></h3>
+      <p style="font-size:14.5px">Genie already has a chat UI. For the LangGraph agent: <b>probe Databricks Apps first</b> (a small Streamlit/Gradio chat calling the endpoint — the truest Data Pilot replica; a 5-minute availability check in Phase 2). If Apps aren't available on Free Edition, <b>fall back to the endpoint's built-in query UI + <code>ai_query</code> from SQL</b> — zero build, proven live in s03.</p>
+    </div>
+  </div>
+</section>
+
+<section id="phases">
+  <p class="kicker">delivery plan</p>
+  <h2 style="font-size:22px">Four phases, each with delivered-when checks</h2>
+
+  <div class="phase"><div class="phase-num">1</div><div class="card">
+    <h3>Golden set + confirmation — seed of 3 first</h3>
+    <p style="font-size:14.5px">Author <code>evals/golden_qa.yaml</code> starting with the <b>3 seed questions</b> (rent, sales, yield above), plus <code>src/lib/agent_eval.py</code> with the deterministic graders (value-within-tolerance, top-k overlap, rule-applied, refusal) — unit-tested like the ml_* libs. Run each seed's <code>golden_sql</code> on the warehouse, attach computed answers, bring them to you for confirmation. The remaining ~17 (ports + traps + refusals) are authored the same way after the seed slice has been through the whole loop once.</p>
+    <div class="checks"><b>Delivered when</b>
+      <ul style="margin:0"><li><b>CLI:</b> <code>uv run pytest tests/test_agent_eval.py</code> green; a make target prints the question × candidate-answer table.</li>
+      <li><b>You:</b> all 3 seed cases <code>confirmed</code> (later: every added case confirmed or dropped — no drafts when a benchmark run counts).</li></ul>
+    </div>
+  </div></div>
+
+  <div class="phase"><div class="phase-num">2</div><div class="card">
+    <h3>LangGraph agent, registered and served</h3>
+    <p style="font-size:14.5px"><code>src/lib/qa_agent.py</code> (the Data Pilot agent graph ported to UC/warehouse per the map above; guardrails included, unit-testable with a stubbed LLM) + <code>src/notebooks/agent/01_log_register.py</code> (MLflow ChatAgent → UC) + <code>02_deploy.py</code> (agents.deploy, falling back to plain serving) + <code>resources/jobs/agent_bench.yml</code>. Probe Databricks Apps availability here too (D2).</p>
+    <div class="checks"><b>Delivered when</b>
+      <ul style="margin:0"><li><b>CLI:</b> <code>curl</code> to the endpoint answers a T1 question correctly end to end.</li>
+      <li><b>UI:</b> model visible in Catalog Explorer under <code>propertyiq_ml.qa_agent</code>; endpoint Ready in Serving.</li>
+      <li><b>SQL:</b> <code>ai_query('&lt;endpoint&gt;', ...)</code> returns an answer from the warehouse.</li></ul>
+    </div>
+  </div></div>
+
+  <div class="phase"><div class="phase-num">3</div><div class="card">
+    <h3>Run the benchmark, three ways — locally</h3>
+    <p style="font-size:14.5px">The harness <b>runs on the laptop</b> (<code>scripts/run_benchmark.py</code>), because that's the only place all three agents are reachable at once: Genie and the LangGraph endpoint are HTTPS APIs callable from anywhere, but Data Pilot lives on <code>localhost</code> — a Databricks job can never reach it. The local runner drives all three live, scores with the graders + <code>mlflow.genai.evaluate</code> (logging to the workspace MLflow tracking server), and writes <code>agent_benchmark</code> to Delta via the SDK. A workspace-job variant stays possible for Genie + LangGraph only (e.g. scheduled regression runs), but the three-way comparison is local by construction.</p>
+    <div class="checks"><b>Delivered when</b>
+      <ul style="margin:0"><li><b>CLI:</b> <code>make benchmark</code> (local) succeeds with Data Pilot up; verdict query on <code>agent_benchmark</code> returns one row per agent × tier.</li>
+      <li><b>UI:</b> workspace MLflow experiment shows per-question traces and judge scores.</li></ul>
+    </div>
+  </div></div>
+
+  <div class="phase"><div class="phase-num">4</div><div class="card">
+    <h3>Verdict dashboard + chat surface</h3>
+    <p style="font-size:14.5px">AI/BI dashboard from <code>agent_benchmark</code> (bundle-deployed), Genie space linked; LangGraph chat surface per D2 outcome. s06 lavish tour with screenshots, same treatment as s04.</p>
+    <div class="checks"><b>Delivered when</b>
+      <ul style="margin:0"><li><b>UI:</b> published dashboard shows scores per agent; Ask-Genie works from it; you can ask the LangGraph agent a question through the chosen surface.</li>
+      <li><b>CLI:</b> <code>databricks bundle validate</code>/<code>deploy</code> clean; PR through /no-mistakes.</li></ul>
+    </div>
+  </div></div>
+</section>
+
+<section id="risks" class="card">
+  <h2>Risks &amp; open questions</h2>
+  <div class="table-wrap" style="margin-top:10px">
+    <table>
+      <thead><tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td><code>agents.deploy()</code> may not work on Free Edition (Agent Framework serving).</td><td><span class="tag warn">medium</span></td><td>Proven fallback: plain CPU model serving of the ChatAgent (s03 pattern). Benchmark can even run the agent in-notebook if serving fails entirely.</td></tr>
+        <tr><td>Databricks Apps may be unavailable on Free Edition → no native chat UI for the LangGraph agent.</td><td><span class="tag warn">medium</span></td><td>5-minute probe in Phase 2; fallback is endpoint query UI + <code>ai_query</code>, with Genie as the chat surface on the dashboard.</td></tr>
+        <tr><td>Genie Conversations API pagination/latency quirks (space API already showed sorting/id quirks).</td><td><span class="tag dim">low</span></td><td>Poll with backoff like the AI_FORECAST statement loop; capture raw responses for debugging.</td></tr>
+        <tr><td>Data Pilot's Postgres numbers may differ from Delta gold (load windows, rounding) → false "wrong answer" scores.</td><td><span class="tag warn">medium</span></td><td>Confirmation step cross-checks both engines per case; tolerance or drop where they legitimately diverge.</td></tr>
+        <tr><td>Golden answers unconfirmed — scoring against wrong references invalidates the whole verdict.</td><td><span class="tag risk">high</span></td><td>Phase 1 gate: nothing runs until every case is confirmed or dropped by you (D3).</td></tr>
+        <tr><td>LLM-judge scores from a 70B FMAPI model can be noisy.</td><td><span class="tag dim">low</span></td><td>Judges annotate, deterministic graders decide.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="decisions">
+  <p class="kicker">your call</p>
+  <h2 style="font-size:22px">Decisions before build starts</h2>
+
+  <div class="card" style="margin-top:14px">
+    <h3>Decisions locked</h3>
+    <div class="table-wrap" style="margin-top:10px"><table>
+      <tbody>
+        <tr><td><b>D1 · Contenders</b></td><td>Exactly the three: Genie + LangGraph + Data Pilot — no naive baseline.</td></tr>
+        <tr><td><b>D2 · Chat surface</b></td><td>Probe Databricks Apps first; fall back to endpoint UI + <code>ai_query</code>.</td></tr>
+        <tr><td><b>D3 · Golden confirmation</b></td><td>s06 lavish review page — computed candidate answers with per-row confirm/edit.</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <form class="q-form" data-lavish-question="plan-approval" onsubmit="event.preventDefault();var c=new FormData(event.currentTarget).get('appr');if(c){window.lavish.queuePrompt('Plan approval: '+c,{tag:'choice',text:'Approval: '+c,element:event.currentTarget,data:{question:'plan-approval',answer:c}});event.currentTarget.classList.add('is-queued')}">
+    <h3>Approve the plan</h3>
+    <label><input type="radio" name="appr" value="Approved — start Phase 1 on agent_bench"><span>Approved — start Phase 1 on <code>agent_bench</code></span></label>
+    <label><input type="radio" name="appr" value="Approved with the changes I have annotated"><span>Approved with the changes I've annotated on this page</span></label>
+    <label><input type="radio" name="appr" value="Not yet — see my annotations"><span>Not yet — see my annotations</span></label>
+    <button type="submit">Queue answer</button><span class="queued">queued ✓</span>
+  </form>
+</section>
+
+<footer>s05 · agent_bench · PropertyIQ on Databricks Free Edition · prior context: s03 (ML loop), s04 (deployment tour)</footer>
+</main>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const src = document.getElementById('arch-diagram').textContent;
+  window.renderMermaid = async function(){
+    const dark = document.documentElement.getAttribute('data-theme')==='dark';
+    mermaid.initialize({startOnLoad:false, theme: dark?'dark':'neutral', securityLevel:'loose',
+      themeVariables: dark
+        ? {primaryColor:'#173428', primaryTextColor:'#E8EDE9', primaryBorderColor:'#33413A', lineColor:'#71807A', fontFamily:'IBM Plex Sans'}
+        : {primaryColor:'#E4F1EC', primaryTextColor:'#14181C', primaryBorderColor:'#C9D2C9', lineColor:'#77837A', fontFamily:'IBM Plex Sans'}});
+    const el = document.getElementById('arch-diagram');
+    try{
+      const {svg} = await mermaid.render('arch-svg-'+Date.now(), src);
+      el.outerHTML = '<div id="arch-diagram" style="min-width:0">'+svg+'</div>';
+    }catch(e){ el.textContent = src; }
+  };
+  window.renderMermaid();
+</script>
+</body>
+</html>
