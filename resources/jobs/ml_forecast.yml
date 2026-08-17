@@ -1,0 +1,31 @@
+# Phase 3 of the ML task: the forecasting comparison. One notebook, three
+# methods (AI_FORECAST on the warehouse, a trained per-series model, and the
+# seasonal-naive baseline), one backtest verdict table.
+#
+# No schedule and no trigger — this is an analysis job, run on demand:
+#   databricks bundle run ml_forecast -t dev
+resources:
+  jobs:
+    ml_forecast:
+      name: propertyiq-ml-forecast
+      max_concurrent_runs: 1
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: ml_schema
+          default: ${var.ml_schema}
+        - name: warehouse_id
+          default: ${var.warehouse_id}
+        - name: backtest_months
+          default: "6"
+
+      tasks:
+        - task_key: compare
+          notebook_task:
+            notebook_path: ../../src/notebooks/ml/05_forecast_compare.py
+
+      queue:
+        enabled: true

@@ -1,0 +1,46 @@
+# The training half of the ML loop: rebuild the feature table, train a
+# challenger, and let the gate decide whether it takes the @champion alias.
+#
+# Deploy-code-not-models: this job is the deployable unit. Promotion is a
+# decision the gate makes from a fresh holdout, never a human copying model
+# files between environments.
+#
+# No schedule. It runs on demand (`databricks bundle run ml_train -t dev`) and
+# is triggered automatically by ml_score's condition task when feature drift
+# crosses the "shifted" threshold — retraining happens because the data moved,
+# not because a calendar said so. (The weekly cadence is already carried by
+# ml_score, which follows the medallion's file-arrival rhythm.)
+resources:
+  jobs:
+    ml_train:
+      name: propertyiq-ml-train
+      max_concurrent_runs: 1
+
+      # No compute config = serverless, the only option on Free Edition.
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: ml_schema
+          default: ${var.ml_schema}
+        - name: holdout_months
+          default: "6"
+        # Resolved by the bundle to the *deployed* endpoint name — in dev mode
+        # that carries the dev_<user>_ prefix, so nothing hardcodes it.
+        - name: endpoint
+          default: ${resources.model_serving_endpoints.rent_estimator_endpoint.name}
+
+      tasks:
+        - task_key: build_features
+          notebook_task:
+            notebook_path: ../../src/notebooks/ml/01_build_features.py
+
+        - task_key: train_register
+          depends_on:
+            - task_key: build_features
+          notebook_task:
+            notebook_path: ../../src/notebooks/ml/02_train_register.py
+
+      queue:
+        enabled: true

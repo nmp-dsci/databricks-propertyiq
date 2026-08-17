@@ -1,0 +1,23 @@
+# The real-time half of R5: the champion rent estimator behind a serverless
+# CPU serving endpoint (the only serving flavour on Free Edition).
+#
+# The endpoint pins a concrete model *version* — serving config cannot follow
+# a UC alias by itself. The promotion gate closes that gap: when ml_train
+# promotes a challenger, the training notebook updates this endpoint's config
+# to the new champion version in the same breath as the alias flip. Losing
+# challengers never touch it.
+#
+# scale_to_zero: a weekly-data demo endpoint should cost nothing between
+# queries; first request after idle pays a cold start, which is the trade-off
+# to say out loud.
+resources:
+  model_serving_endpoints:
+    rent_estimator_endpoint:
+      name: propertyiq-rent-estimator
+      config:
+        served_entities:
+          - name: rent-estimator
+            entity_name: ${var.catalog}.${var.ml_schema}.rent_estimator
+            entity_version: "1"
+            workload_size: Small
+            scale_to_zero_enabled: true

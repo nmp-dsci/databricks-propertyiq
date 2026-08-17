@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR #3 — what shipped, where it lives, how to test it</title>
+<script>
+  (function(){
+    var t; try{t=localStorage.getItem('s04-theme')}catch(e){}
+    var mq=window.matchMedia('(prefers-color-scheme: dark)');
+    if(t!=='light'&&t!=='dark'){t=mq.matches?'dark':'light'}
+    document.documentElement.setAttribute('data-theme',t);
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#F4F6F3; --panel:#FFFFFF; --panel-2:#FAFBF9; --ink:#14181C; --ink-soft:#3E4A44;
+  --muted:#5A655D; --faint:#77837A; --line:#DDE4DC; --line-2:#C9D2C9;
+  --signal:#17876B; --signal-soft:#E4F1EC; --amber:#B26A12; --amber-soft:#F6ECDC;
+  --fail:#A8402F; --fail-soft:#F4E2DE;
+  --chip-bg:#E4F1EC; --chip-ink:#11674F; --hover:#FAFBF9;
+  --nav-bg:rgba(244,246,243,.85); --grid-line:rgba(16,22,19,.028);
+  --hero-glow:rgba(23,135,107,.07); --pre-bg:#14181C; --pre-ink:#E8ECE9;
+  --shadow:0 1px 2px rgba(16,22,19,.04),0 10px 26px -14px rgba(16,22,19,.16);
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --w:1120px;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#101511; --panel:#171E19; --panel-2:#1C2420; --ink:#E8EDE9; --ink-soft:#C3CCC5;
+  --muted:#96A29A; --faint:#71807A; --line:#242E27; --line-2:#33413A;
+  --signal:#43C29A; --signal-soft:#173428; --amber:#D19243; --amber-soft:#2A2113;
+  --fail:#E0715C; --fail-soft:#2E1A16;
+  --chip-bg:#173428; --chip-ink:#7FDDBB; --hover:#1C2420;
+  --nav-bg:rgba(16,21,17,.85); --grid-line:rgba(232,237,233,.035);
+  --hero-glow:rgba(67,194,154,.09); --pre-bg:#0B0F0C; --pre-ink:#DEE5E0;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 10px 26px -14px rgba(0,0,0,.55);
+}
+*,*::before,*::after{box-sizing:border-box;min-width:0}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.62;letter-spacing:-.005em;
+  background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:34px 34px;transition:background-color .2s,color .2s}
+a{color:var(--signal);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:3px}
+h1,h2,h3,h4{font-weight:600;letter-spacing:-.02em;line-height:1.2;margin:0}
+:where(p,h1,h2,h3,h4,li,td,th,summary,label,button){overflow-wrap:anywhere}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 12px}
+.nav{position:sticky;top:0;z-index:50;background:var(--nav-bg);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav-inner{max-width:var(--w);margin:0 auto;padding:11px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px;color:var(--ink)}
+.brand b{font-size:15px;font-weight:600}
+.brand span{font-family:var(--mono);font-size:12px;color:var(--faint)}
+.nav-links{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.nav-links a{font-size:13.5px;color:var(--muted)}
+.theme-btn{border:1px solid var(--line-2);background:var(--panel);color:var(--ink);border-radius:8px;
+  font-family:var(--mono);font-size:12px;padding:5px 10px;cursor:pointer}
+.wrap{max-width:var(--w);margin:0 auto;padding:0 22px}
+.hero{padding:54px 0 8px;position:relative}
+.hero::before{content:"";position:absolute;inset:-40px -200px auto;height:340px;
+  background:radial-gradient(600px 240px at 30% 40%,var(--hero-glow),transparent 70%);pointer-events:none}
+.hero h1{font-size:clamp(28px,4.4vw,40px);max-width:22ch}
+.lede{font-size:17.5px;color:var(--ink-soft);max-width:74ch;margin:18px 0 0}
+.lede b{color:var(--ink)}
+section{padding:34px 0 6px}
+section>h2{font-size:23px;margin-bottom:6px}
+.sub{color:var(--muted);font-size:15px;max-width:78ch;margin:4px 0 20px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.pad{padding:20px 22px}
+.chip{display:inline-block;font-family:var(--mono);font-size:11.5px;padding:2px 9px;border-radius:99px;
+  background:var(--chip-bg);color:var(--chip-ink);white-space:nowrap}
+.chip.amber{background:var(--amber-soft);color:var(--amber)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:26px 0 0}
+.fact{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.fact .k{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.fact .v{font-size:15.5px;font-weight:600;margin-top:4px}
+.fact .v small{font-weight:400;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:14.2px}
+th{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);
+  text-align:left;padding:10px 12px;border-bottom:1px solid var(--line-2);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--hover)}
+.tbl-scroll{overflow-x:auto;border-radius:14px}
+code,pre{font-family:var(--mono)}
+pre{background:var(--pre-bg);color:var(--pre-ink);border-radius:12px;padding:16px 18px;overflow-x:auto;
+  font-size:13px;line-height:1.55;margin:12px 0 0}
+p>code,li>code,td>code{font-size:.88em;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.phase{border:1px solid var(--line);border-radius:16px;background:var(--panel);box-shadow:var(--shadow);margin:0 0 20px;overflow:hidden}
+.phase-head{padding:16px 22px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline}
+.phase-head h3{font-size:17.5px}
+.phase-head .tag{font-family:var(--mono);font-size:12px;color:var(--faint)}
+.phase-body{padding:16px 22px;display:grid;gap:18px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+@media (max-width:820px){.phase-body{grid-template-columns:1fr}}
+.phase-body h5{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:0 0 8px}
+.filelist{margin:0;padding:0;list-style:none;font-size:13.4px}
+.filelist li{padding:4px 0;border-bottom:1px dashed var(--line);display:flex;gap:8px;align-items:baseline}
+.filelist li:last-child{border-bottom:none}
+.filelist code{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.filelist .what{color:var(--muted);font-size:12.8px}
+.kv{margin:0;padding:0;list-style:none;font-size:13.8px}
+.kv li{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.kv li:last-child{border-bottom:none}
+.kv .k{font-family:var(--mono);font-size:11.5px;color:var(--faint);flex:0 0 96px;text-transform:uppercase;letter-spacing:.06em;padding-top:2px}
+.kv .v{color:var(--ink-soft)}
+.steps{margin:0;padding:0;list-style:none;counter-reset:s}
+.steps li{counter-increment:s;position:relative;padding:7px 0 7px 34px;font-size:14px;color:var(--ink-soft);border-bottom:1px dashed var(--line)}
+.steps li:last-child{border-bottom:none}
+.steps li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:8px;
+  font-family:var(--mono);font-size:11.5px;color:var(--signal)}
+.steps code{font-family:var(--mono);font-size:12.8px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.shot{border:1px solid var(--line);border-radius:16px;background:var(--panel);box-shadow:var(--shadow);margin:0 0 26px;overflow:hidden}
+.shot img{display:block;width:100%;height:auto;border-bottom:1px solid var(--line)}
+.shot-cap{padding:16px 22px}
+.shot-cap h4{font-size:15.5px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.shot-cap h4 .n{font-family:var(--mono);font-size:12px;color:var(--signal)}
+.shot-cap p{font-size:14px;color:var(--muted);margin:8px 0 0}
+.shot-cap .path{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:8px}
+.shot-cap .path b{color:var(--ink-soft);font-weight:500}
+.try{background:var(--signal-soft);border-left:3px solid var(--signal);padding:10px 14px;border-radius:0 8px 8px 0;font-size:13.6px;color:var(--ink-soft);margin:10px 0 0}
+.try b{color:var(--signal)}
+.two-col{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+footer{padding:34px 0 46px;color:var(--faint);font-size:13px}
+</style>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <div class="brand"><b>PropertyIQ ML</b><span>s04 · PR #3 tour</span></div>
+  <div class="nav-links">
+    <a href="#changes">The changes</a><a href="#deploy">How it deployed</a>
+    <a href="#tour">Frontend tour</a><a href="#test">Test it yourself</a>
+    <button class="theme-btn" onclick="toggleTheme()">◐ theme</button>
+  </div>
+</div></nav>
+
+<div class="wrap">
+
+<header class="hero">
+  <p class="kicker">PR #3 · branch ml-task → main · validated by no-mistakes · CI green</p>
+  <h1>What the ML PR shipped, where it lives in Databricks, and how to test it</h1>
+  <p class="lede"><a href="https://github.com/nmp-dsci/databricks-propertyiq/pull/3">PR&nbsp;#3</a> lands the three phases decided in the s03 plan — the <b>batch MLOps loop</b>, the <b>serving endpoint</b>, and the <b>forecast comparison</b> — all already deployed and run live in your workspace. Every screenshot below is from your actual Free Edition frontend, taken today.</p>
+  <div class="facts">
+    <div class="fact"><div class="k">Commits</div><div class="v">8 <small>4 feature · 2 docs · 2 gate fixes</small></div></div>
+    <div class="fact"><div class="k">Diff</div><div class="v">+3,805 lines <small>32 files</small></div></div>
+    <div class="fact"><div class="k">Local tests</div><div class="v">48 passing <small>~21s, no workspace</small></div></div>
+    <div class="fact"><div class="k">Pipeline verdict</div><div class="v">checks-passed <small>1 real bug found &amp; fixed</small></div></div>
+  </div>
+</header>
+
+<section id="changes">
+  <h2>The changes, by phase</h2>
+  <p class="sub">Each phase is an independent slice of the diff. The shared foundation: every piece of logic lives in <code>src/lib/</code> as a pure, unit-tested function; notebooks orchestrate; jobs and the endpoint are bundle resources in <code>resources/</code>.</p>
+
+  <article class="phase">
+    <div class="phase-head"><h3>Phase 1 · A — the batch MLOps loop</h3><div><span class="chip">deployed &amp; run</span> <span class="tag">commit c677926</span></div></div>
+    <div class="phase-body">
+      <div>
+        <h5>Code</h5>
+        <ul class="filelist">
+          <li><code>src/lib/ml_features.py</code><span class="what">leakage-safe lag features, time split</span></li>
+          <li><code>src/lib/ml_model.py</code><span class="what">sklearn pipeline + 2% promotion gate</span></li>
+          <li><code>src/lib/ml_monitoring.py</code><span class="what">PSI drift + status labels</span></li>
+          <li><code>src/notebooks/ml/01_build_features.py</code><span class="what">UC feature table w/ PK + comment</span></li>
+          <li><code>src/notebooks/ml/02_train_register.py</code><span class="what">MLflow → UC registry → gate → alias</span></li>
+          <li><code>src/notebooks/ml/03_batch_score.py</code><span class="what">champion scores the month, version-stamped</span></li>
+          <li><code>src/notebooks/ml/04_drift_metrics.py</code><span class="what">PSI + rolling MAE tables</span></li>
+          <li><code>resources/jobs/ml_train.yml</code> · <code>ml_score.yml</code><span class="what">the two jobs</span></li>
+        </ul>
+      </div>
+      <div>
+        <h5>What it proves</h5>
+        <ul class="kv">
+          <li><span class="k">gate</span><span class="v">Proven live: drift auto-triggered a retrain; v2 and v3 lost to v1 on the shared holdout, so <code>@champion</code> never moved on noise</span></li>
+          <li><span class="k">trigger</span><span class="v"><code>ml_score</code> fires when <code>gold_property_rent</code> changes (table-update trigger), then score → drift → condition task → retrain</span></li>
+          <li><span class="k">tables</span><span class="v"><code>features_rent</code>, <code>predictions_rent</code>, <code>drift_metrics</code>, <code>prediction_accuracy</code> in <code>propertyiq_ml</code></span></li>
+          <li><span class="k">finding</span><span class="v"><code>spark_udf</code> is broken on serverless (runtime-version parse bug) — documented, driver-side pandas used instead</span></li>
+        </ul>
+      </div>
+    </div>
+  </article>
+
+  <article class="phase">
+    <div class="phase-head"><h3>Phase 2 · C — real-time serving</h3><div><span class="chip">deployed &amp; queried live</span> <span class="tag">commit cf5bde5</span></div></div>
+    <div class="phase-body">
+      <div>
+        <h5>Code</h5>
+        <ul class="filelist">
+          <li><code>resources/serving/rent_estimator_endpoint.yml</code><span class="what">scale-to-zero CPU endpoint</span></li>
+          <li><code>src/notebooks/ml/02_train_register.py</code><span class="what">+ promotion rolls the endpoint version</span></li>
+          <li><code>src/sql/03_ml_ai_query.sql</code><span class="what">real-time scoring from plain SQL</span></li>
+        </ul>
+      </div>
+      <div>
+        <h5>What it proves</h5>
+        <ul class="kv">
+          <li><span class="k">endpoint</span><span class="v"><code>dev_nathanphillips369_propertyiq-rent-estimator</code>, READY, serving champion v1 at 100% traffic</span></li>
+          <li><span class="k">verified</span><span class="v">REST invocation and <code>ai_query()</code> from the 2X-Small warehouse both return live predictions — two Free Edition capabilities that were undocumented</span></li>
+          <li><span class="k">promotion</span><span class="v">The alias flip <i>is</i> the deploy: the train notebook rolls the endpoint config in the same run — zero YAML change</span></li>
+        </ul>
+      </div>
+    </div>
+  </article>
+
+  <article class="phase">
+    <div class="phase-head"><h3>Phase 3 · B — the forecast comparison</h3><div><span class="chip">run, verdict in a table</span> <span class="tag">commit 2f23a1e</span></div></div>
+    <div class="phase-body">
+      <div>
+        <h5>Code</h5>
+        <ul class="filelist">
+          <li><code>src/lib/ml_forecast.py</code><span class="what">per-series trend+seasonal + seasonal-naive</span></li>
+          <li><code>src/notebooks/ml/05_forecast_compare.py</code><span class="what">3 methods, one backtest, one verdict</span></li>
+          <li><code>resources/jobs/ml_forecast.yml</code><span class="what">on-demand analysis job</span></li>
+        </ul>
+        <h5 style="margin-top:14px">The verdict (6 held-out months, ~440 series)</h5>
+        <div class="tbl-scroll"><table>
+          <thead><tr><th>Method</th><th>Avg MAE (yield pts)</th></tr></thead>
+          <tbody>
+            <tr><td><code>ai_forecast</code> <span class="chip">winner</span></td><td>0.4661</td></tr>
+            <tr><td><code>trained</code> (per-series model)</td><td>0.5722</td></tr>
+            <tr><td><code>seasonal_naive</code> (baseline)</td><td>0.5817</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div>
+        <h5>What it proves</h5>
+        <ul class="kv">
+          <li><span class="k">finding</span><span class="v"><code>AI_FORECAST</code> works on the Free 2X-Small warehouse — probed live, was undocumented</span></li>
+          <li><span class="k">judgment</span><span class="v">The platform function beat the hand-rolled model, and the model barely beat naive — the honest "buy, don't build" answer</span></li>
+          <li><span class="k">pattern</span><span class="v">AI functions live on the warehouse; the job drives it via the Statement Execution API, polled past the 50s sync ceiling</span></li>
+        </ul>
+      </div>
+    </div>
+  </article>
+
+  <p class="sub" style="margin-top:4px">The PR also carries the earlier <b>declarative-pipeline comparison</b> (commit fabdc72 — a side-by-side Lakeflow Declarative Pipeline that never runs), plus two pipeline-gate commits: the <b>NaN-PSI fix</b> (an unmonitorable feature read "stable" and could silently disarm auto-retrain — found by review, fixed with its own test) and README/CLAUDE.md documentation.</p>
+</section>
+
+<section id="deploy">
+  <h2>How it got deployed</h2>
+  <p class="sub">Same loop as the medallion pipeline — nothing new. The key mental model: <b><code>make deploy</code> uploads the local working tree</b>, not a git branch. Git/CI validate; only your machine deploys.</p>
+  <div class="two-col">
+    <div class="panel pad">
+      <h4 style="font-size:15.5px;margin-bottom:10px">The loop that shipped each phase</h4>
+      <ol class="steps">
+        <li><code>make test</code> — 48 unit tests on local Spark prove features, gate and forecasters in ~21s</li>
+        <li><code>make validate</code> — type-checks <code>databricks.yml</code> + all resource YAMLs, no upload</li>
+        <li><code>make deploy</code> — uploads the tree to <code>/Workspace/Users/&lt;you&gt;/.bundle/databricks-propertyiq/dev/files/</code> and creates/updates jobs + endpoint</li>
+        <li><code>databricks bundle run ml_train -t dev</code> — trains, registers, gates; logs stream to the terminal</li>
+        <li><code>databricks bundle run ml_score -t dev</code> — scores, computes drift, auto-retrains if shifted</li>
+        <li>Iterate: three real issues were found by running (spark_udf break, PSI treadmill ×2), fixed locally, redeployed</li>
+      </ol>
+    </div>
+    <div class="panel pad">
+      <h4 style="font-size:15.5px;margin-bottom:10px">What landed where</h4>
+      <ul class="kv">
+        <li><span class="k">jobs</span><span class="v"><code>[dev …] propertyiq-ml-train / -ml-score / -ml-forecast</code> — dev-mode name prefix</span></li>
+        <li><span class="k">model</span><span class="v"><code>workspace.propertyiq_ml.rent_estimator</code> — v1 <code>@champion</code>, v3 <code>@challenger</code></span></li>
+        <li><span class="k">endpoint</span><span class="v"><code>dev_nathanphillips369_propertyiq-rent-estimator</code> — dev prefix resolved into the job via <code>${resources.…name}</code></span></li>
+        <li><span class="k">tables</span><span class="v">8 tables in <code>propertyiq_ml</code> — features, predictions, drift, accuracy, 4 forecast tables</span></li>
+        <li><span class="k">experiment</span><span class="v"><code>/Users/…/propertyiq-rent-estimator</code> — one MLflow run per training</span></li>
+        <li><span class="k">gate</span><span class="v">no-mistakes pipeline: review → test → docs → lint → push → PR #3 → CI green</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="tour">
+  <h2>Frontend tour — see it in the workspace</h2>
+  <p class="sub">Seven stops, screenshotted from your workspace today. Each caption says where to click to get there yourself.</p>
+
+  <figure class="shot">
+    <img src="s04_assets/01_ml_train_runs.jpg" alt="ml_train job run history with three green runs">
+    <figcaption class="shot-cap">
+      <h4><span class="n">01</span> The training job and its three green runs</h4>
+      <p>Three bars = three trainings: your manual <code>bundle run</code>, plus two <b>drift-triggered auto-retrains</b>. Each produced a model version; the gate decided none of them beat v1.</p>
+      <div class="path"><b>Jobs &amp; Pipelines</b> → search "propertyiq-ml-train" → Runs tab</div>
+    </figcaption>
+  </figure>
+
+  <figure class="shot">
+    <img src="s04_assets/02_ml_score_tasks.jpg" alt="ml_score job tasks tab showing table-update trigger and serverless compute">
+    <figcaption class="shot-cap">
+      <h4><span class="n">02</span> The scoring job — trigger, DAG, lineage</h4>
+      <p>Right panel is the story: <b>Table update trigger</b> monitoring <code>gold_property_rent</code> (event-driven, not a clock), <b>Serverless</b> compute, and UC <b>lineage</b> (5 upstream, 4 downstream tables). The DAG runs score → drift → check_drift (max_psi &gt; 0.25) → retrain.</p>
+      <div class="path"><b>Jobs &amp; Pipelines</b> → "propertyiq-ml-score" → Tasks tab</div>
+    </figcaption>
+  </figure>
+
+  <figure class="shot">
+    <img src="s04_assets/03_model_registry.jpg" alt="Unity Catalog model page showing champion and challenger aliases">
+    <figcaption class="shot-cap">
+      <h4><span class="n">03</span> The registry — champion &amp; challenger, live</h4>
+      <p>The single best screen for the MLOps story: <b>v1 wears <code>@champion</code></b> and is bound to the serving endpoint (right column); <b>v3 wears <code>@challenger</code></b> — a retrain that lost the gate and stayed archived, not deployed. The activity log below is the audit trail of all three registrations.</p>
+      <div class="path"><b>Catalog</b> → workspace → propertyiq_ml → Models → rent_estimator</div>
+    </figcaption>
+  </figure>
+
+  <figure class="shot">
+    <img src="s04_assets/07_experiment_runs.jpg" alt="MLflow experiment with three tracked training runs">
+    <figcaption class="shot-cap">
+      <h4><span class="n">04</span> Experiment tracking — one run per training</h4>
+      <p>Every training logged params, metrics (MAE, R², naive baseline) and the model artifact. Click any run to see exactly what data shape and features produced which version — that's the lineage half of R2.</p>
+      <div class="path"><b>Experiments</b> (left nav, AI/ML) → propertyiq-rent-estimator</div>
+    </figcaption>
+  </figure>
+
+  <figure class="shot">
+    <img src="s04_assets/04_endpoint_ready.jpg" alt="Serving endpoint page showing Ready state and invocation URL">
+    <figcaption class="shot-cap">
+      <h4><span class="n">05</span> The serving endpoint — Ready, scaled to zero</h4>
+      <p>State <b>Ready</b>, invocation URL at the top, serving <code>rent_estimator</code> <b>Version 1 at 100% traffic</b>, CPU Small, <i>scaled to zero</i> between calls. The starter-code panel gives cURL / Python / SQL snippets for any client.</p>
+      <div class="path"><b>Serving</b> (left nav) → dev_nathanphillips369_propertyiq-rent-estimator</div>
+    </figcaption>
+  </figure>
+
+  <figure class="shot">
+    <img src="s04_assets/05_endpoint_query.jpg" alt="Query endpoint dialog with a live prediction response">
+    <figcaption class="shot-cap">
+      <h4><span class="n">06</span> Testing it in the browser — a live prediction</h4>
+      <p>The <b>Use</b> button opens this Query dialog. A 3-bed house in postcode 2327 with last month's rent at $520 → the champion predicts <b>$517.23/week</b>, live from the endpoint. (First call after idle pays the scale-to-zero cold start — this one took ~40s.)</p>
+      <div class="path">Endpoint page → <b>Use</b> (top right) → paste request → Send request</div>
+      <div class="try"><b>Try it:</b> the exact request JSON is in the "Test it yourself" section below — paste, send, done.</div>
+    </figcaption>
+  </figure>
+
+  <figure class="shot">
+    <img src="s04_assets/06_catalog_tables.jpg" alt="Catalog Explorer showing the propertyiq_ml schema with 8 tables, a function and the model">
+    <figcaption class="shot-cap">
+      <h4><span class="n">07</span> Everything in one governed schema</h4>
+      <p>The <code>propertyiq_ml</code> schema holds the whole loop: 8 tables (features, predictions, drift, accuracy, 4 forecast tables), the model, and an <code>ai_query</code> wrapper function. Note the Genie bar up top already suggesting <i>"Which method has the lowest average MAE?"</i> — the table comments written by the notebooks are doing their NL2SQL job.</p>
+      <div class="path"><b>Catalog</b> → workspace → propertyiq_ml · Sample Data needs the warehouse attached (Select compute → Serverless Starter Warehouse)</div>
+    </figcaption>
+  </figure>
+</section>
+
+<section id="test">
+  <h2>Test it yourself — four ways</h2>
+  <div class="two-col">
+    <div class="panel pad">
+      <h4 style="font-size:15.5px">1 · The endpoint, in the UI</h4>
+      <p class="sub" style="margin:6px 0 8px">Serving → the endpoint → <b>Use</b> → paste → Send request.</p>
+<pre>{"dataframe_records": [{
+  "postcode": "2327", "property_type": "house",
+  "bedroom_band": "3", "rent_lag_1": 520.0,
+  "rent_lag_3": 510.0, "rent_lag_12": 480.0,
+  "rent_trailing_3m": 515.0, "volume_trailing_3m": 22.0,
+  "sale_price_lag_1": 720000.0, "month_of_year": 7
+}]}</pre>
+    </div>
+    <div class="panel pad">
+      <h4 style="font-size:15.5px">2 · From SQL, via ai_query()</h4>
+      <p class="sub" style="margin:6px 0 8px">SQL Editor on the warehouse, or from the repo: <code>make sql FILE=src/sql/03_ml_ai_query.sql</code> (swap in the dev-prefixed endpoint name).</p>
+<pre>SELECT ai_query(
+  'dev_nathanphillips369_propertyiq-rent-estimator',
+  named_struct('postcode','2327','property_type','house',
+    'bedroom_band','3','rent_lag_1',520.0, ...),
+  returnType =&gt; 'DOUBLE');</pre>
+    </div>
+    <div class="panel pad">
+      <h4 style="font-size:15.5px">3 · The whole loop, from the terminal</h4>
+<pre>databricks bundle run ml_train -t dev    # retrain + gate
+databricks bundle run ml_score -t dev    # score + drift
+databricks bundle run ml_forecast -t dev # comparison</pre>
+      <p class="sub" style="margin:8px 0 0">Watch the train run's log print the gate verdict — "CHAMPION STANDS" or "PROMOTED" — then refresh the registry page (stop 03) to see aliases move.</p>
+    </div>
+    <div class="panel pad">
+      <h4 style="font-size:15.5px">4 · Ask the data</h4>
+      <p class="sub" style="margin:6px 0 8px">In the SQL editor (or via the Genie bar on any <code>propertyiq_ml</code> table):</p>
+<pre>SELECT * FROM propertyiq_ml.prediction_accuracy;
+SELECT * FROM propertyiq_ml.drift_metrics
+ORDER BY psi DESC;
+SELECT method, round(avg(mae),4) avg_mae
+FROM propertyiq_ml.forecast_comparison
+GROUP BY method ORDER BY avg_mae;</pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Screenshots captured live from the Free Edition workspace on 2026-08-17. PR: github.com/nmp-dsci/databricks-propertyiq/pull/3 · plan &amp; rubric: s03 · branch ml-task at e155891.</p>
+</footer>
+
+</div>
+
+<script>
+function toggleTheme(){
+  var r=document.documentElement;
+  var next=r.getAttribute('data-theme')==='dark'?'light':'dark';
+  r.setAttribute('data-theme',next);
+  try{localStorage.setItem('s04-theme',next)}catch(e){}
+}
+</script>
+</body>
+</html>

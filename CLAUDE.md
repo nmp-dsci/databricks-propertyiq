@@ -76,6 +76,12 @@ make pull-dashboard              # pull UI dashboard edits back into the repo
 
 Prefer `make ship` over calling `databricks` directly, so tests always run first.
 
+The ML jobs (`ml_train`, `ml_score`, `ml_forecast`) aren't wired into `make
+run`/`make ship` — they run on demand via the CLI directly, e.g.
+`databricks bundle run ml_train -t dev`. `ml_train` also runs automatically
+when `ml_score`'s drift check trips; `ml_score` itself runs off a table-update
+trigger on `gold_property_rent`. See `README.md` for the full ML loop.
+
 ## When changing a transform
 
 1. Change `src/lib/transforms.py`.
@@ -85,6 +91,11 @@ Prefer `make ship` over calling `databricks` directly, so tests always run first
 
 Do not verify a logic change by running the job — it is 100× slower and the
 failure message is worse.
+
+The same discipline applies to `src/lib/ml_features.py`, `ml_model.py`,
+`ml_forecast.py` and `ml_monitoring.py` — pure functions, tested in
+`tests/test_ml_*.py`, imported by `src/notebooks/ml/*.py` for orchestration
+only.
 
 ## When changing the dashboard
 

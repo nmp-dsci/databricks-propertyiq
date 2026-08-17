@@ -1,0 +1,49 @@
+# A Lakeflow Declarative Pipeline doing the same work as `medallion_job.yml`,
+# kept side by side so the two approaches can be read against each other.
+#
+# NOT A REPLACEMENT. The job is the working pipeline; this exists to make the
+# comparison concrete. It writes into its OWN schema (`${var.pipeline_schema}`,
+# default `propertyiq_dp`) so it cannot touch the tables the job owns — same
+# table names, different schema, so a diff is purely about the framework.
+#
+# It has NO trigger and NO schedule, and `continuous: false`. Deploying the
+# bundle creates it; it only ever runs if someone types
+# `databricks bundle run medallion_pipeline`.
+resources:
+  pipelines:
+    medallion_pipeline:
+      name: propertyiq-medallion-pipeline
+
+      # Where the pipeline publishes. `schema` is the modern key (the old one
+      # was `target`). Deliberately NOT ${var.schema} — see header.
+      catalog: ${var.catalog}
+      schema: ${var.pipeline_schema}
+
+      # Serverless is the only option on Free Edition, and the only way to get
+      # incremental materialized-view refresh.
+      serverless: true
+
+      # Triggered, not continuous: the upstream feed publishes weekly, so an
+      # always-on pipeline would bill 24/7 to do nothing. This is the pipeline
+      # equivalent of the job's `trigger(availableNow=True)`.
+      continuous: false
+
+      # development: true keeps compute warm between updates and skips the
+      # retry-with-backoff cycle, so an iteration is seconds rather than
+      # minutes. Set false for a production deploy.
+      development: true
+
+      libraries:
+        - glob:
+            include: ../../src/pipelines/propertyiq/transformations/**
+
+      # Values the transformation files read with `spark.conf.get(...)`.
+      # This is how a pipeline gets parameters — there is no `dbutils.widgets`
+      # and no job `parameters:` block.
+      configuration:
+        propertyiq.landing_root: /Volumes/${var.catalog}/${var.schema}/${var.volume}/landing
+        # The deployed bundle file root, so the transformations can import the
+        # SAME src/lib/transforms.py the job uses. A job notebook gets there
+        # with a relative `..`; a pipeline has no notebook-relative cwd, so the
+        # path is passed in explicitly.
+        propertyiq.lib_root: ${workspace.file_path}/src

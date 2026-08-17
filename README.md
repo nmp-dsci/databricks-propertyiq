@@ -17,11 +17,19 @@ internet. Every choice below falls out of those limits.
 databricks.yml                 bundle definition — targets, variables
 resources/
   jobs/medallion_job.yml       4-task serverless job (bronze → silver → gold → checks)
+  jobs/ml_train.yml            feature build → train → promotion gate (on demand + drift-triggered)
+  jobs/ml_score.yml            feature build → batch score → drift → conditional retrain
+  jobs/ml_forecast.yml         AI_FORECAST vs trained model vs seasonal-naive comparison
+  pipelines/medallion_pipeline.yml  Declarative Pipeline variant of the medallion, side by side
+  serving/rent_estimator_endpoint.yml  scale-to-zero serving endpoint for the champion model
   dashboards/property_overview.yml
 genie/propertyiq.genie.json    Genie space definition (checked in for reproducibility, not a bundle resource)
 src/
   notebooks/*.py               Databricks source-format notebooks (render as notebooks up there)
-  lib/transforms.py            the actual logic — pure, unit-tested, no I/O
+  notebooks/ml/*.py            feature build, train/register/gate, batch score, drift, forecast compare
+  lib/transforms.py            the medallion logic — pure, unit-tested, no I/O
+  lib/ml_features.py, ml_model.py, ml_forecast.py, ml_monitoring.py   the ML logic — same pattern
+  pipelines/propertyiq/        the Declarative Pipeline variant's transformations (own README)
   sql/*.sql                    warehouse queries, runnable from the terminal
 dashboards/*.lvdash.json       AI/BI dashboard, deployed as code
 tests/                         local Spark tests, no workspace required
@@ -171,6 +179,14 @@ Keeping bad rows in silver rather than filtering them means the price dashboard
 and the data-quality dashboard read the same table — so "what happened to the
 missing rows?" has an answer in the data instead of in someone's memory.
 
+**A second implementation, for comparison.** `resources/pipelines/medallion_pipeline.yml`
+and `src/pipelines/propertyiq/` do the same bronze/silver/gold work as a
+Lakeflow Declarative Pipeline, importing the exact same `transforms.py`
+functions. It writes to its own schema (`propertyiq_dp`), has no trigger, and
+never runs unless you type `databricks bundle run medallion_pipeline` — it
+exists so the two frameworks can be read side by side, not as a migration. See
+`src/pipelines/propertyiq/README.md` for what actually differs between them.
+
 ---
 
 ## Why the logic isn't in the notebooks
@@ -210,6 +226,82 @@ don't; three known, documented labelling differences between the dbt and
 Spark ports are reported but not enforced. See the module docstring for
 details.
 
+## ML: a rent estimator through a full MLOps loop, plus a forecasting comparison
+
+Three model shapes on top of the gold marts, each demonstrating a different
+piece of production ML on Free Edition rather than chasing accuracy:
+
+**The rent estimator loop** (`resources/jobs/ml_train.yml`,
+`resources/jobs/ml_score.yml`, `src/notebooks/ml/01-04`, `src/lib/ml_features.py`,
+`ml_model.py`, `ml_monitoring.py`):
+
+- **`01_build_features.py`** materialises `<ml_schema>.features_rent` from the
+  gold marts, with an informational primary key
+  (`postcode, property_type, bedroom_band, month`). The same function backs
+  both training and batch scoring, so there is no second feature
+  implementation to drift out of sync.
+- **`02_train_register.py`** trains a challenger, logs it to MLflow, registers
+  it in Unity Catalog, then runs the **promotion gate**: the challenger only
+  takes the `@champion` alias if it beats the incumbent by a 2% MAE margin on
+  the same fresh holdout window (the rule is unit-tested in
+  `tests/test_ml_model.py`). Losing challengers stay registered under
+  `@challenger`, so the version history is the audit trail. Promotion also
+  rolls the serving endpoint forward to the new champion version, since
+  serving config pins a version and cannot follow an alias by itself.
+- **`03_batch_score.py`** scores the latest month with whatever `@champion`
+  currently points at and stamps every row with `model_version` and
+  `scored_at`. Scoring is **driver-side pandas**, not
+  `mlflow.pyfunc.spark_udf` — the scale-out UDF path is currently broken on
+  serverless (its mlflow fails parsing the runtime version string
+  `18.x-aarch64-photon-scala2`), and at ~2.5k rows/month a single in-process
+  `predict()` is the right tool anyway. Documented in the notebook rather than
+  worked around.
+- **`04_drift_metrics.py`** computes PSI per feature (latest month vs a
+  **trailing 24-month** reference — an all-history reference would make the
+  trend in rents itself look like permanent drift) and MAE per month.
+  `month_of_year` is excluded from PSI, since a cyclical feature always reads
+  as drifted against a full-year window. A feature with an empty reference or
+  current window is labelled `unmonitorable` rather than `stable` — PSI is
+  `NaN` there, and `NaN > threshold` is always false, so leaving it as
+  `stable` would silently read as a clean bill of health. The job's
+  `check_drift` condition task reads `max_monitorable_psi()`, the worst PSI
+  over features that could actually be compared (excluding `unmonitorable`
+  ones, so a `NaN` never propagates into the condition and defeats it);
+  above 0.25 ("shifted") it fires `ml_train` automatically via a
+  `run_job_task` — retraining triggers because the input moved, not on a
+  schedule.
+
+`ml_score` runs off a table-update trigger on `gold_property_rent`, one hop
+downstream of the medallion job, same event-driven pattern as the medallion's
+file-arrival trigger. `ml_train` has no trigger of its own: it runs on demand
+(`databricks bundle run ml_train -t dev`) or when `ml_score` triggers it.
+
+**Real-time serving** (`resources/serving/rent_estimator_endpoint.yml`,
+`src/sql/03_ml_ai_query.sql`): the champion behind a scale-to-zero CPU serving
+endpoint, queryable over REST or from plain SQL via
+`ai_query('propertyiq-rent-estimator', ...)` on the same 2X-Small warehouse
+the dashboards use. First request after idle pays a cold start — the
+trade-off for a weekly-data demo endpoint costing nothing between queries.
+
+**The forecasting comparison** (`resources/jobs/ml_forecast.yml`,
+`src/notebooks/ml/05_forecast_compare.py`, `src/lib/ml_forecast.py`): the same
+task, three tools, one backtest. `AI_FORECAST` (the platform SQL table
+function, driven over the Statement Execution API with polling past its 50s
+synchronous ceiling since forecasting hundreds of series runs longer), a
+trained per-series trend + monthly-seasonality model (sklearn — pre-installed,
+so no runtime `pip install`; `prophet`/`lightgbm` were ruled out for the same
+reason), and seasonal-naive as the baseline either must beat. All three
+forecast the same held-out months from the same truncated history; the
+**comparison table** (`<ml_schema>.forecast_comparison`) is the deliverable,
+not the forecast itself. No trigger — run on demand:
+`databricks bundle run ml_forecast -t dev`.
+
+ML tables live in their own `<ml_schema>` (default `propertyiq_ml`), the same
+isolation pattern as the pipeline's `propertyiq_dp`: the ML jobs can never
+write over the marts the medallion job owns.
+
+---
+
 ## Genie space
 
 `genie/propertyiq.genie.json` is the PropertyIQ Genie space definition,
@@ -228,9 +320,11 @@ identifier or id, and each entry needs a caller-supplied lowercase 32-hex id.
 | Serverless compute only | No `job_clusters:` anywhere — omitting compute *is* the config |
 | One 2X-Small warehouse | Dashboards read pre-aggregated gold, never row-level silver |
 | 5 concurrent job tasks | Job is a 4-task sequential DAG |
-| Restricted outbound internet | Source data is published into a UC volume ahead of time by a separate local pipeline, never downloaded by the workspace itself |
+| Restricted outbound internet | Source data is published into a UC volume ahead of time by a separate local pipeline, never downloaded by the workspace itself; the forecast model is sklearn (pre-installed), never `prophet`/`lightgbm` via runtime `pip install` |
 | No account-level API | Everything is workspace-scoped; no service principals |
 | Non-commercial use only | Public open government data only (NSW Valuer General, Rental Bond Board) — no proprietary or customer data |
+| `mlflow.pyfunc.spark_udf` broken on serverless | Batch scoring (`03_batch_score.py`) predicts driver-side with pandas instead of a distributed UDF — also the right scale for ~2.5k rows/month |
+| Serving config pins a model version, not a UC alias | The training notebook rolls the endpoint's pinned version forward in the same run that flips `@champion` |
 
 Sources: [Free Edition limitations](https://docs.databricks.com/aws/en/getting-started/free-edition-limitations)
 
