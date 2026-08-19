@@ -207,6 +207,58 @@ def _upsert(full_name: str, batch: list[dict]) -> int:
     return int(result.get("success_row_count") or 0)
 
 
+def stale_keys(index_name: str):
+    """Keys this index has synced that silver no longer holds as current.
+
+    A soft-deleted chunk (transcript-lab's replace_chunks() re-chunking a video)
+    just stops showing up in _UNSYNCED — it was already upserted in a prior run
+    and would otherwise sit in the index forever, retrievable and citable even
+    though the corpus no longer has that text.
+    """
+    return spark.sql(f"""
+        SELECT s.chunk_key
+        FROM {prefix}.index_sync_state s
+        LEFT JOIN {prefix}.silver_chunks c
+          ON c.chunk_key = s.chunk_key AND c.is_current
+        WHERE s.index_name = '{index_name}' AND c.chunk_key IS NULL
+    """)
+
+
+def _delete(full_name: str, keys: list[str]) -> int:
+    response = w.api_client.do(
+        "POST",
+        f"/api/2.0/vector-search/indexes/{full_name}/delete-data",
+        body={"primary_keys": keys},
+    )
+    result = response.get("result") or {}
+    failed = result.get("failed_primary_keys") or []
+    if failed:
+        raise RuntimeError(f"{full_name}: {len(failed)} row(s) rejected, e.g. {failed[:3]}")
+    return len(keys)
+
+
+def retire(index_name: str, batch_size: int = 200) -> int:
+    """Delete keys silver no longer holds as current, and drop them from sync state."""
+    full_name = f"{prefix}.{index_name}"
+    keys = [row["chunk_key"] for row in stale_keys(index_name).collect()]
+    if not keys:
+        print(f"{index_name}: nothing to retire")
+        return 0
+
+    retired = 0
+    for start in range(0, len(keys), batch_size):
+        batch = keys[start : start + batch_size]
+        retired += _delete(full_name, batch)
+
+    keys_literal = ", ".join(f"'{key}'" for key in keys)
+    spark.sql(f"""
+        DELETE FROM {prefix}.index_sync_state
+        WHERE index_name = '{index_name}' AND chunk_key IN ({keys_literal})
+    """)
+    print(f"{index_name}: retired {retired:,} row(s)")
+    return retired
+
+
 # COMMAND ----------
 
 gte_pushed = push("rag_chunks_gte", gte_rows_to_sync())
@@ -217,6 +269,23 @@ gte_pushed = push("rag_chunks_gte", gte_rows_to_sync())
 # produced them, so a retrieval difference against Chroma is the engine's, not
 # the model's.
 minilm_pushed = push("rag_chunks_minilm", minilm_rows_to_sync())
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### 3 · Retire chunks silver no longer holds as current
+# MAGIC
+# MAGIC A re-chunk that produces fewer chunks for a video leaves stale keys behind
+# MAGIC in the index — left there, the agent can retrieve and cite text the corpus
+# MAGIC no longer contains, which is worse than a miss because it looks authoritative.
+
+# COMMAND ----------
+
+gte_retired = retire("rag_chunks_gte")
+
+# COMMAND ----------
+
+minilm_retired = retire("rag_chunks_minilm")
 
 # COMMAND ----------
 
