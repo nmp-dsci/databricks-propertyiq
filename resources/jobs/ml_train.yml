@@ -26,10 +26,13 @@ resources:
           default: ${var.ml_schema}
         - name: holdout_months
           default: "6"
-        # Resolved by the bundle to the *deployed* endpoint name — in dev mode
-        # that carries the dev_<user>_ prefix, so nothing hardcodes it.
+        # Was resolved from the serving resource, which is parked while the
+        # two Free Edition endpoint slots are held by the agents (see
+        # resources/serving/rent_estimator_endpoint.yml). The name is a
+        # variable now so un-parking that resource does not require editing
+        # this job as well.
         - name: endpoint
-          default: ${resources.model_serving_endpoints.rent_estimator_endpoint.name}
+          default: ${var.rent_estimator_endpoint}
 
       tasks:
         - task_key: build_features

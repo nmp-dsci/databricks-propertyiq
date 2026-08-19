@@ -28,6 +28,27 @@ variables:
       pipeline_schema: the ML jobs can never write over the marts the
       medallion job owns.
     default: propertyiq_ml
+  rent_estimator_endpoint:
+    description: >-
+      Serving endpoint name for the rent estimator. Currently PARKED — Free
+      Edition caps custom serving endpoints at two and both are held by the
+      agents (see resources/serving/rent_estimator_endpoint.yml). In dev the
+      deployed endpoint carried a `dev_<user>_` prefix; this default matches the
+      un-prefixed production name.
+    default: propertyiq-rent-estimator
+  rag_schema:
+    description: >-
+      Schema for the transcript-lab RAG port (branch `rag`): bronze/silver
+      tables exported from the sibling transcript-rag-agent project, plus the
+      Vector Search indexes and the QA agent built on them. Separate from
+      `schema` for the same reason as pipeline_schema and ml_schema — a
+      different corpus with a different owner.
+    default: rag
+  rag_volume:
+    description: >-
+      UC volume (inside rag_schema) holding the landed transcript-lab
+      snapshots, one directory per entity, published by scripts/rag_export.py.
+    default: landing
   warehouse_id:
     description: >-
       Serverless SQL warehouse id, used by dashboards and SQL tasks.
@@ -77,6 +98,12 @@ targets:
           # Same reasoning as medallion above: dev owns the armed table-update
           # trigger on gold_property_rent; a demo deploy must not arm a second
           # one that double-scores every mart rebuild.
+          trigger:
+            pause_status: PAUSED
+        rag_ingest:
+          # And again for the RAG landing volume: dev owns that file-arrival
+          # trigger, so a demo deploy must not race a second run against the
+          # same silver MERGE targets on one `make rag-export`.
           trigger:
             pause_status: PAUSED
       pipelines:

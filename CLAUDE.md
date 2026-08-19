@@ -74,6 +74,9 @@ make sql FILE=src/sql/01_explore.sql
 make pull-dashboard              # pull UI dashboard edits back into the repo
 make register-agent              # log + register the QA agent to UC, roll its endpoint
 make benchmark                   # run the 3-way QA benchmark (Genie / LangGraph / Data Pilot) locally
+make rag-export                  # land transcript-lab's full corpus on the volume (manual, idempotent)
+make register-rag-agent          # log + register rag_transcript_agent to UC and deploy it
+make rag-eval                    # score Chroma vs both Vector Search indexes on the golden set
 ```
 
 Prefer `make ship` over calling `databricks` directly, so tests always run first.
@@ -83,6 +86,11 @@ run`/`make ship` — they run on demand via the CLI directly, e.g.
 `databricks bundle run ml_train -t dev`. `ml_train` also runs automatically
 when `ml_score`'s drift check trips; `ml_score` itself runs off a table-update
 trigger on `gold_property_rent`. See `README.md` for the full ML loop.
+
+The `rag_ingest` job (bronze land → silver merge → checks → index sync) is
+also not wired into `make run`/`make ship` — run it via `databricks bundle
+run rag_ingest -t dev` after a `make rag-export`. See `README.md` for the
+full RAG pipeline.
 
 ## When changing a transform
 

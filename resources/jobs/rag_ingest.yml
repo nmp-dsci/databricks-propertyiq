@@ -1,0 +1,62 @@
+resources:
+  jobs:
+    rag_ingest:
+      name: rag-transcript-ingest
+      # Snapshots reconcile against the newest landed file, so two concurrent
+      # runs would race the same MERGE target for no benefit.
+      max_concurrent_runs: 1
+
+      # No `job_clusters:` — serverless, the only option on Free Edition.
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.rag_schema}
+        - name: volume
+          default: ${var.rag_volume}
+
+      tasks:
+        - task_key: bronze
+          notebook_task:
+            notebook_path: ../../src/notebooks/rag/01_bronze_land.py
+
+        - task_key: silver
+          depends_on:
+            - task_key: bronze
+          notebook_task:
+            notebook_path: ../../src/notebooks/rag/02_silver_merge.py
+
+        # Before the index, on purpose: a failed check stops the run here, so a
+        # truncated export can never become a re-embedded corpus.
+        - task_key: checks
+          depends_on:
+            - task_key: silver
+          notebook_task:
+            notebook_path: ../../src/notebooks/rag/03_checks.py
+
+        # Embeds what changed and pushes it to both Vector Search indexes. This
+        # is the hand-rolled equivalent of a delta-sync index's own pipeline,
+        # which never provisions on Free Edition (see the notebook header).
+        - task_key: index_sync
+          depends_on:
+            - task_key: checks
+          notebook_task:
+            notebook_path: ../../src/notebooks/rag/04_index_sync.py
+
+      # `make rag-export` pushes from the laptop whenever the local corpus
+      # moves; this trigger is what turns that push into a pipeline run. A
+      # schedule would be wrong here — the exporter is manual (decision D3),
+      # so most hours there is nothing new to do.
+      #
+      # The exporter uploads up to 11 files in a burst, so the 60s quiet window
+      # debounces them into one run, and the 5-minute floor caps the damage if
+      # an export is repeated.
+      trigger:
+        pause_status: UNPAUSED
+        file_arrival:
+          url: /Volumes/${var.catalog}/${var.rag_schema}/${var.rag_volume}/
+          wait_after_last_change_seconds: 60
+          min_time_between_triggers_seconds: 300
+
+      queue:
+        enabled: true

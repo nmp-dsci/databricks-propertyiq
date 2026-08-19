@@ -68,9 +68,25 @@ register-agent: ## Log + register the QA agent to UC and roll its endpoint
 benchmark: ## Run the 3-way QA benchmark (Genie / LangGraph / Data Pilot) locally
 	@uv run python scripts/run_benchmark.py
 
+.PHONY: rag-export
+rag-export: ## Snapshot transcript-lab's corpus and land what changed on the volume
+	@uv run python scripts/rag_export.py
+
+.PHONY: register-rag-agent
+register-rag-agent: ## Log + register rag_transcript_agent to UC and deploy it
+	@uv run python scripts/register_rag_agent.py
+
+.PHONY: rag-export-dry
+rag-export-dry: ## Same, but build and hash only — uploads nothing
+	@uv run python scripts/rag_export.py --dry-run
+
+.PHONY: rag-eval
+rag-eval: ## Score Chroma vs both Vector Search indexes on the golden set
+	@uv run python scripts/rag_eval.py
+
 .PHONY: pull-dashboard
 pull-dashboard: ## Pull UI edits back into dashboards/*.lvdash.json before committing
-	@for resource in property_overview agent_benchmark; do \
+	@for resource in property_overview agent_benchmark rag_eval; do \
 		$(DB) bundle generate dashboard --resource $$resource -t $(TARGET) --force; \
 	done
 

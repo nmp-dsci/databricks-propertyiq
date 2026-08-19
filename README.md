@@ -20,25 +20,33 @@ resources/
   jobs/ml_train.yml            feature build → train → promotion gate (on demand + drift-triggered)
   jobs/ml_score.yml            feature build → batch score → drift → conditional retrain
   jobs/ml_forecast.yml         AI_FORECAST vs trained model vs seasonal-naive comparison
+  jobs/rag_ingest.yml          bronze land → silver merge → checks → index sync, file-arrival triggered
   pipelines/medallion_pipeline.yml  Declarative Pipeline variant of the medallion, side by side
-  serving/rent_estimator_endpoint.yml  scale-to-zero serving endpoint for the champion model
+  serving/rent_estimator_endpoint.yml  parked — Free Edition caps custom endpoints at two, both taken by the agents
   dashboards/property_overview.yml
   dashboards/agent_benchmark.yml       verdict dashboard for the QA-agent benchmark
+  dashboards/rag_eval.yml              verdict dashboard for the RAG retrieval benchmark
 genie/propertyiq.genie.json    Genie space definition (checked in for reproducibility, not a bundle resource)
 src/
   notebooks/*.py               Databricks source-format notebooks (render as notebooks up there)
   notebooks/ml/*.py            feature build, train/register/gate, batch score, drift, forecast compare
+  notebooks/rag/*.py           bronze land, silver merge, checks, index sync (embed + upsert + retire)
   lib/transforms.py            the medallion logic — pure, unit-tested, no I/O
   lib/ml_features.py, ml_model.py, ml_forecast.py, ml_monitoring.py   the ML logic — same pattern
   lib/qa_agent.py               the LangGraph QA agent — route → plan_sql → execute → reflect → answer
   lib/qa_agent_model.py         MLflow models-from-code entrypoint (the agent as a ChatAgent)
   lib/agent_eval.py             deterministic graders for the QA-agent benchmark
+  lib/rag_export.py             pure transforms for the transcript-lab export (hash, land, merge)
+  lib/rag_agent.py              rag_transcript_agent — single/multi/agentic_rag modes, LLM + SQL injected
+  lib/rag_agent_model.py        MLflow models-from-code entrypoint (the RAG agent as a ChatAgent)
+  lib/ir_metrics.py             retrieval-quality graders for the RAG benchmark
   pipelines/propertyiq/        the Declarative Pipeline variant's transformations (own README)
   sql/*.sql                    warehouse queries, runnable from the terminal
 dashboards/*.lvdash.json       AI/BI dashboards, deployed as code
 evals/golden_qa.yaml           confirmed golden Q&A set for the QA-agent benchmark
 tests/                         local Spark tests, no workspace required
-scripts/                       setup, auth, SQL runner, gold/dbt parity check, agent register + benchmark
+scripts/                       setup, auth, SQL runner, parity check, agent register + benchmark,
+                                RAG export (+ dry-run), RAG agent register, RAG eval, chroma subprocess helpers
 ```
 
 ### The one trick that makes this work
@@ -354,7 +362,27 @@ the three gold tables as model resources at log time, since `agents.deploy`'s
 auto-auth needs them declared to avoid `INSUFFICIENT_PERMISSIONS`. This runs
 **locally**, not as a workspace job — `langgraph` isn't preinstalled on
 serverless job compute, and logging from the laptop needs nothing
-workspace-side.
+workspace-side. `deploy()` sets the MLflow tracking and registry URIs itself
+so it also works standalone (otherwise `agents.deploy` resolves the logged
+model against a local sqlite store and fails with "Logged model not found"),
+and deletes older deployments of the same model before creating the new one —
+Free Edition's provisioned-concurrency quota fits about one served version per
+agent, and `agents.deploy` otherwise accumulates versions until it fails with
+`Quota Exceeded`.
+
+**Real-time tracing on the deployed endpoint** needs the same two things as
+`rag_transcript_agent` (below): `databricks-agents>=1.2.0` in the model's
+`pip_requirements`, baked into the serving image rather than just installed on
+the laptop, and explicit spans, since this agent also calls FMAPI and the SQL
+warehouse via `databricks-sdk` rather than `databricks-langchain` so no
+autologger captures those calls. `ask()` carries an
+`@mlflow.trace(span_type="AGENT")` root — without it every LLM and SQL call
+would land as its own orphan trace, and this agent retries a failed statement
+once, which would scatter one logical answer across several unrelated traces.
+The chat calls are traced as `LLM`; the warehouse statement is traced `TOOL`
+rather than `RETRIEVER`, because this agent answers by executing generated SQL
+rather than retrieving documents, and the span's input is the statement
+itself — the most useful thing to see when an answer looks wrong.
 
 **`evals/golden_qa.yaml`** is the confirmed golden question set: each case
 has a question, a grader spec, and an answer computed by deterministic SQL
@@ -389,6 +417,93 @@ latency per contender, read straight from `agent_benchmark`.
 
 ---
 
+## RAG: transcript·lab's corpus, ported onto Vector Search
+
+The sibling `transcript-rag-agent` project (transcript·lab) is an
+evaluation-first RAG workbench over ~100 YouTube transcripts — local Chroma,
+MiniLM embeddings, a 20-question golden set with real IR metrics. It had no
+Databricks code at all. This branch moves its corpus and its answer paths onto
+the lakehouse and then *measures whether that was an improvement*.
+
+**The ETL is a push, because Free Edition cannot pull.** `make rag-export`
+snapshots every store in that project and lands one Parquet per entity on
+`/Volumes/workspace/rag/landing/<entity>/`, named `<entity>_<sha8>.parquet` —
+the same content-hashed, append-only contract `propertyiq_getdata` uses for the
+property feed. Unchanged content is never uploaded, so the command is safe to
+run whenever and a no-op run costs nothing. That is also why it is manual
+rather than scheduled: it is idempotent, and most hours there is nothing new.
+`make rag-export-dry` runs the same hash-and-diff without uploading, to check
+what a real run would land.
+
+Reading the corpus needs `chromadb` (the vectors live in Chroma's HNSW segment
+files, not its SQLite), so `scripts/_chroma_dump.py` runs in *transcript-lab's
+own virtualenv* as a subprocess. Pulling chromadb in here would drag
+onnxruntime alongside pyspark for no benefit.
+
+| Landed | Rows | Table |
+|---|---|---|
+| chunks (with their MiniLM vectors) | 2,966 | `silver_chunks` |
+| transcripts / segments / summaries | 107 / 80,836 / 105 | `silver_transcripts`, `silver_segments`, `silver_summaries` |
+| golden questions | 20 | `silver_golden_qa` |
+| graph entities / relations / claims | 14,809 / 7,508 / 9,295 | `silver_graph_*` |
+
+`rag_ingest` (file-arrival triggered) runs Auto Loader → bronze → a silver
+reconciliation. Each file is a **full snapshot**, so silver `MERGE`s the newest
+one on `(video_id, chunk_index)` and marks anything absent as
+`is_current = false` — a soft delete, because transcript·lab recreates chunk
+ids on every re-index, so a "missing" row is usually a re-chunk rather than a
+retraction. That is also why the merge key is the position plus a `text_sha`
+and never the chunk id.
+
+A soft delete in silver still has to be enforced in Vector Search: after
+`04_index_sync.py` pushes changed chunks to both indexes, it also **retires**
+any key those indexes hold that silver no longer marks current — otherwise a
+re-chunked video leaves stale text behind that the agent can still retrieve
+and cite, which is worse than a miss because it looks authoritative.
+
+**`rag_transcript_agent`** (`make register-rag-agent`) serves three of
+transcript·lab's answer paths from one deployment, chosen per call with
+`custom_inputs={"mode": ...}`: `single` (one retrieval), `multi` (decompose →
+retrieve per sub-question → synthesize) and `agentic` (a ReAct loop, the
+default). `custom_outputs` returns the retrieved chunk keys and the decision
+log, which is what lets the eval score *retrieval* rather than only prose.
+Answers cite video title and timestamp. `agents.deploy` gives it a Review App.
+
+**Real-time tracing on the deployed endpoint** needs two things beyond a
+recent `mlflow`, both easy to miss because they fail silently rather than
+erroring: `databricks-agents>=1.2.0` in the model's `pip_requirements` (it has
+to be baked into the *serving image*, not just installed on the laptop, or the
+Traces tab shows "Upgrade to MLflow 3 to enable real-time tracing" regardless
+of the `mlflow` version), and explicit spans, since this agent calls FMAPI and
+Vector Search via `databricks-sdk` rather than `databricks-langchain` (same
+tradeoff as `qa_agent`, above) so no autologger captures those calls. `ask()`
+carries an `@mlflow.trace(span_type="AGENT")` root — serving opens no root span
+of its own for a `ChatAgent`, so without it every retriever and LLM call below
+would land as its own orphan trace instead of one tree — and `retrieve`/`llm`
+are traced as `RETRIEVER`/`LLM` respectively. The `mode` tag is applied inside
+`ask()` via `mlflow.update_current_trace`, not in `ChatAgentModel.predict`,
+because no trace exists to tag until `ask()` opens one.
+
+**The verdict** (`make rag-eval`, dashboard `rag_eval.lvdash.json`) runs the
+golden set against three retrievers so each comparison moves one variable:
+
+| Contender | recall@10 | MRR | NDCG@10 | What it isolates |
+|---|---|---|---|---|
+| `chroma` | 0.633 | 0.529 | 0.522 | the local baseline |
+| `vs_minilm` | 0.633 | 0.529 | 0.522 | **the engine** — same vectors, Databricks |
+| `vs_gte` | 0.583 | 0.625 | 0.578 | **the model** — managed `gte-large-en` |
+
+`chroma` and `vs_minilm` matching *exactly* is the control working: Vector
+Search reproduces the local index when given the same vectors, so the port is
+faithful. Swapping in gte then trades a little recall for noticeably better
+ranking — it finds slightly fewer of the expected videos but puts the right one
+first more often. Scoring is on video ids because they are stable; the golden
+set's chunk anchors were verified against a 23-video corpus (it is 107 now) and
+are re-anchored by content hash, with whatever fails to resolve reported rather
+than scored as a silent miss.
+
+---
+
 ## Free Edition constraints, and what each one forced
 
 | Constraint | Consequence here |
@@ -402,6 +517,9 @@ latency per contender, read straight from `agent_benchmark`.
 | `mlflow.pyfunc.spark_udf` broken on serverless | Batch scoring (`03_batch_score.py`) predicts driver-side with pandas instead of a distributed UDF — also the right scale for ~2.5k rows/month |
 | Serving config pins a model version, not a UC alias | The training notebook rolls the endpoint's pinned version forward in the same run that flips `@champion` |
 | `langgraph` not preinstalled on serverless job compute | Agent registration (`make register-agent`) and the QA-agent benchmark (`make benchmark`) run locally, not as workspace jobs |
+| Vector Search **delta-sync** indexes never provision | Their backing pipeline sits on "pending setup of pipeline resources" indefinitely, even though the endpoint reports ONLINE and **direct-access indexes work fine**. `04_index_sync.py` therefore does by hand what delta-sync would do: embed changed chunks with `ai_query`, upsert them, keyed on `text_sha` so nothing is re-embedded needlessly |
+| Vector Search queries reject control-plane calls | The index lives behind its own data-plane host, so a raw `api_client.do` query returns `PermissionDenied` — use the typed `w.vector_search_indexes.query_index` instead (upserts, oddly, work either way) |
+| **Two** custom model-serving endpoints | Both slots are held by agents (`qa_agent`, `rag_transcript_agent`), so the rent estimator's endpoint is parked (`resources/serving/rent_estimator_endpoint.yml`) — a third fails the whole bundle deploy, not just its own resource. Swapping back is a documented two-step |
 
 Sources: [Free Edition limitations](https://docs.databricks.com/aws/en/getting-started/free-edition-limitations)
 

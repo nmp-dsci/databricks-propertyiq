@@ -8,11 +8,13 @@ build installs the model's own pip requirements.
 Deploy order (s05 plan, decision D2 adjacent):
   1. Log the ChatAgent (models-from-code) and register propertyiq_ml.qa_agent.
   2. Smoke-test the registered model locally (load + one question).
-  3. Try agents.deploy() — the Agent Framework path (unverified on Free
-     Edition; this run is the probe).
+  3. Try agents.deploy() — the Agent Framework path, verified live on Free
+     Edition; clears older deployments of the same model first since the
+     provisioned-concurrency quota fits about one served version per agent.
   4. Fall back to a plain CPU serving endpoint with auth passed via env vars
      backed by a secret scope, the same serving pattern the s03 rent
-     estimator proved live.
+     estimator proved live. Retained for the workspaces where agents.deploy
+     isn't available.
 """
 
 from __future__ import annotations
@@ -50,7 +52,14 @@ def log_and_register() -> str:
             python_model=str(REPO / "src" / "lib" / "qa_agent_model.py"),
             code_paths=[str(REPO / "src" / "lib")],
             pip_requirements=[
-                "mlflow>=3.1",
+                # 3.1.3+ is the floor agents.deploy documents, and also the one
+                # MLflow 3 real-time tracing needs.
+                "mlflow>=3.1.3",
+                # Must be in the SERVING image, not just on the laptop: without
+                # databricks-agents>=1.2 in the container the endpoint cannot
+                # stream traces, and the Traces tab shows "Upgrade to MLflow 3
+                # to enable real-time tracing" even though mlflow itself is 3.x.
+                "databricks-agents>=1.2.0",
                 "langgraph>=1.0",
                 "databricks-sdk>=0.68",
             ],
@@ -98,6 +107,26 @@ def smoke_test(version: str) -> None:
 def deploy(version: str) -> None:
     try:
         from databricks import agents
+
+        # Set here as well as in log_and_register so `deploy` works standalone:
+        # without these, agents.deploy resolves the logged model against a local
+        # sqlite store and fails with "Logged model not found".
+        mlflow.set_tracking_uri("databricks")
+        mlflow.set_registry_uri("databricks-uc")
+
+        # Free Edition's provisioned-concurrency quota fits about one served
+        # version per agent, and agents.deploy accumulates them until it fails
+        # with "Quota Exceeded". Clearing the old ones first is what makes a
+        # re-deploy routine instead of a cleanup exercise.
+        try:
+            for deployment in agents.list_deployments():
+                if deployment.model_name == MODEL_NAME and str(deployment.model_version) != str(
+                    version
+                ):
+                    print(f"  removing old deployment v{deployment.model_version}")
+                    agents.delete_deployment(MODEL_NAME, deployment.model_version)
+        except Exception as exc:  # noqa: BLE001 — nothing deployed yet is fine
+            print(f"  (no existing deployments to clear: {type(exc).__name__})")
 
         deployment = agents.deploy(MODEL_NAME, version, scale_to_zero=True)
         print(f"agents.deploy OK: {deployment.endpoint_name}")

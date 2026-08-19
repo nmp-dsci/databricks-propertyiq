@@ -17,6 +17,7 @@ import re
 from collections.abc import Callable
 from typing import Annotated, Any, TypedDict
 
+import mlflow
 from langgraph.graph import END, StateGraph
 
 MAX_SQL_RETRIES = 1
@@ -217,8 +218,15 @@ def build_agent(
     return graph.compile()
 
 
+@mlflow.trace(span_type="AGENT", name="qa_agent")
 def ask(agent, question: str) -> dict[str, Any]:
-    """Run one question through a compiled agent; returns answer + trace."""
+    """Run one question through a compiled agent; returns answer + trace.
+
+    Traced as the root span so the LLM and SQL spans below it land in one tree.
+    MLflow does not open a root for a ChatAgent's predict, so without this each
+    call would be filed as its own orphan trace — and a retried statement, the
+    thing you most want to inspect, would scatter across unrelated traces.
+    """
     state = agent.invoke({"question": question, "retries": 0, "decision_log": []})
     return {
         "answer": state.get("answer", ""),
@@ -244,6 +252,7 @@ def make_databricks_agent(
 
     w = WorkspaceClient()
 
+    @mlflow.trace(span_type="LLM", name=model_endpoint)
     def llm(messages: list[dict[str, str]]) -> str:
         response = w.serving_endpoints.query(
             name=model_endpoint,
@@ -254,6 +263,10 @@ def make_databricks_agent(
         )
         return response.choices[0].message.content
 
+    # TOOL rather than RETRIEVER: this agent answers by executing generated SQL
+    # on the warehouse, and the span's input is the statement itself — which is
+    # the single most useful thing to see when an answer looks wrong.
+    @mlflow.trace(span_type="TOOL", name="warehouse_sql")
     def run_sql(sql: str) -> list[dict[str, Any]]:
         import time
 
