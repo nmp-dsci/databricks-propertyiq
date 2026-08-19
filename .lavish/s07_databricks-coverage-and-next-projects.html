@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Databricks coverage review &amp; the next three projects</title>
+<script>
+  (function(){
+    var t; try{t=localStorage.getItem('s07-theme')}catch(e){}
+    var mq=window.matchMedia('(prefers-color-scheme: dark)');
+    if(t!=='light'&&t!=='dark'){t=mq.matches?'dark':'light'}
+    document.documentElement.setAttribute('data-theme',t);
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#F4F6F3; --panel:#FFFFFF; --panel-2:#FAFBF9; --ink:#14181C; --ink-soft:#3E4A44;
+  --muted:#5A655D; --faint:#77837A; --line:#DDE4DC; --line-2:#C9D2C9;
+  --signal:#17876B; --signal-soft:#E4F1EC; --amber:#B26A12; --amber-soft:#F6ECDC;
+  --fail:#A8402F; --fail-soft:#F4E2DE;
+  --chip-bg:#E4F1EC; --chip-ink:#11674F; --hover:#FAFBF9;
+  --nav-bg:rgba(244,246,243,.85); --grid-line:rgba(16,22,19,.028);
+  --hero-glow:rgba(23,135,107,.07); --pre-bg:#14181C; --pre-ink:#E8ECE9;
+  --shadow:0 1px 2px rgba(16,22,19,.04),0 10px 26px -14px rgba(16,22,19,.16);
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --w:1140px;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#101511; --panel:#171E19; --panel-2:#1C2420; --ink:#E8EDE9; --ink-soft:#C3CCC5;
+  --muted:#96A29A; --faint:#71807A; --line:#242E27; --line-2:#33413A;
+  --signal:#43C29A; --signal-soft:#173428; --amber:#D19243; --amber-soft:#2A2113;
+  --fail:#E0715C; --fail-soft:#2E1A16;
+  --chip-bg:#173428; --chip-ink:#7FDDBB; --hover:#1C2420;
+  --nav-bg:rgba(16,21,17,.85); --grid-line:rgba(232,237,233,.035);
+  --hero-glow:rgba(67,194,154,.09); --pre-bg:#0B0F0C; --pre-ink:#DEE5E0;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 10px 26px -14px rgba(0,0,0,.55);
+}
+*,*::before,*::after{box-sizing:border-box;min-width:0}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.62;letter-spacing:-.005em;
+  background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:34px 34px;transition:background-color .2s,color .2s}
+a{color:var(--signal);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:3px}
+h1,h2,h3,h4{font-weight:600;letter-spacing:-.02em;line-height:1.2;margin:0}
+:where(p,h1,h2,h3,h4,li,td,th,summary,label,button){overflow-wrap:anywhere}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 12px}
+.nav{position:sticky;top:0;z-index:50;background:var(--nav-bg);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav-inner{max-width:var(--w);margin:0 auto;padding:11px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px;color:var(--ink)}
+.brand b{font-size:15px;font-weight:600}
+.brand span{font-family:var(--mono);font-size:12px;color:var(--faint)}
+.nav-links{display:flex;gap:16px;flex-wrap:wrap;font-size:13.5px}
+.nav-links a{color:var(--muted)}
+.theme-btn{border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:8px;padding:5px 10px;font-family:var(--mono);font-size:12px;cursor:pointer}
+main{max-width:var(--w);margin:0 auto;padding:30px 22px 90px}
+section{margin-top:48px}
+.hero{padding:38px 0 6px;background:radial-gradient(700px 260px at 20% 0%,var(--hero-glow),transparent)}
+.hero h1{font-size:clamp(25px,4vw,36px);max-width:28ch}
+.hero p.lede{font-size:17px;color:var(--ink-soft);max-width:82ch;margin:16px 0 0}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip-bg);color:var(--chip-ink);border-radius:999px;padding:3px 12px;font-family:var(--mono);font-size:12px;font-weight:500}
+.chip.warn{background:var(--amber-soft);color:var(--amber)}
+.chip.risk{background:var(--fail-soft);color:var(--fail)}
+.chip.plain{background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:22px 24px}
+.card h2{font-size:21px;margin-bottom:6px}
+.card h3{font-size:16px}
+p{margin:10px 0}
+ul{margin:10px 0;padding-left:22px}
+li{margin:5px 0}
+code{font-family:var(--mono);font-size:.88em;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line-2)}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.tag{display:inline-block;font-family:var(--mono);font-size:11px;border-radius:5px;padding:1px 7px;font-weight:500;white-space:nowrap}
+.tag.ok{background:var(--signal-soft);color:var(--signal)}
+.tag.warn{background:var(--amber-soft);color:var(--amber)}
+.tag.risk{background:var(--fail-soft);color:var(--fail)}
+.callout{border-left:3px solid var(--signal);background:var(--signal-soft);border-radius:0 10px 10px 0;padding:12px 16px;font-size:14.5px;color:var(--ink-soft)}
+.callout.warn{border-color:var(--amber);background:var(--amber-soft)}
+.proj-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:18px;margin-top:18px}
+.proj{display:flex;flex-direction:column;gap:0;position:relative}
+.proj .rank{position:absolute;top:-11px;left:18px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;background:var(--signal);color:#fff;border-radius:6px;padding:2px 9px;font-weight:600}
+.proj .rank.alt{background:var(--muted)}
+.proj h3{font-size:17px;margin-top:6px}
+.proj .sub{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:2px}
+.proj .unlocks{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 2px}
+.proj dl{margin:12px 0 0;font-size:13.5px}
+.proj dt{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:10px}
+.proj dd{margin:2px 0 0}
+.q-form{background:var(--panel);border:1px solid var(--line-2);border-radius:12px;padding:16px 18px;margin-top:14px}
+.q-form h3{font-size:15px;margin-bottom:4px}
+.q-form label{display:flex;gap:10px;align-items:flex-start;padding:7px 10px;border:1px solid var(--line);border-radius:9px;margin-top:8px;cursor:pointer;font-size:14px}
+.q-form label:hover{background:var(--hover)}
+.q-form input[type=radio]{margin-top:4px}
+.q-form textarea{width:100%;margin-top:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);color:var(--ink);font-family:var(--sans);font-size:13.5px;padding:8px 10px;min-height:40px}
+.q-form button{margin-top:10px;background:var(--signal);color:#fff;border:none;border-radius:8px;padding:7px 15px;font-family:var(--sans);font-size:13.5px;font-weight:600;cursor:pointer}
+.q-form button:hover{filter:brightness(1.08)}
+.q-form .queued{display:none;margin-left:10px;font-family:var(--mono);font-size:12px;color:var(--signal)}
+.q-form.is-queued .queued{display:inline}
+footer{margin-top:70px;color:var(--faint);font-size:13px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <div class="brand"><b>Portfolio · s07</b><span>coverage review &amp; next projects</span></div>
+  <div class="nav-links">
+    <a href="#proven">Proven</a><a href="#raglab">transcript-lab</a><a href="#coverage">Coverage map</a>
+    <a href="#projects">3 projects</a><a href="#decide">Decide</a>
+  </div>
+  <button class="theme-btn" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('s07-theme',n)}catch(e){}">theme</button>
+</div></nav>
+
+<main>
+<div class="hero">
+  <p class="kicker">interview readiness · databricks-propertyiq + transcript-rag-agent</p>
+  <h1>You've proven the platform core. The gap is RAG — and you already own the hardest half of it.</h1>
+  <p class="lede">Review of everything exercised live on Databricks Free Edition across four merged PRs, plus a survey of
+  <code>transcript-rag-agent</code>. Verdict: <b>13 of 18 core Databricks feature areas are proven with working, tested code</b>;
+  the biggest missing area for an SA coding interview is <b>Vector Search / RAG</b> — which is exactly what transcript-lab
+  implements end-to-end, just on Chroma instead of Databricks. Three project proposals below, ranked.</p>
+  <div class="badges">
+    <span class="chip">13/18 areas proven live</span>
+    <span class="chip warn">gap: Vector Search · CDC/SCD2 · Apps</span>
+    <span class="chip plain">4 PRs merged · 62 tests · 2 dashboards · 2 agents deployed</span>
+  </div>
+</div>
+
+<section id="proven" class="card">
+  <h2>What databricks-propertyiq has already proven — live, on Free Edition</h2>
+  <p>Everything below is merged to <code>main</code> (<code>0592b4e</code>) and was verified against the workspace, not just written.
+  This is the material you can walk an interviewer through today.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Area</th><th>What's exercised</th><th>Where</th></tr>
+    <tr><td><b>Ingestion</b></td><td>Auto Loader on a UC Volume (parquet, <code>rescue</code> schema evolution, versioned <code>schemaLocation</code>, <code>availableNow</code>), updates-only feed contract with sha-suffixed dedup</td><td><code>src/notebooks/01_bronze_ingest.py</code>, <code>src/lib/transforms.py</code></td></tr>
+    <tr><td><b>Medallion + DQ</b></td><td>Bronze → silver → gold (4 marts), DQ as a failing job task (grain uniqueness, coverage floor, plausibility band), <code>COMMENT ON</code> for discovery</td><td><code>02_silver_clean.py</code> … <code>04_checks.py</code></td></tr>
+    <tr><td><b>Lakeflow Declarative Pipelines</b></td><td>Full side-by-side variant of the same pipeline: <code>@dp.table</code> streaming bronze, materialized views, <code>expect_all</code> / <code>expect_or_fail</code>, serverless, own schema; written job-vs-pipeline comparison</td><td><code>src/pipelines/propertyiq/</code></td></tr>
+    <tr><td><b>Jobs &amp; orchestration</b></td><td>File-arrival trigger, table-update trigger, <code>condition_task</code> on drift PSI &gt; 0.25 → <code>run_job_task</code> auto-retrain: a closed MLOps loop. All serverless</td><td><code>resources/jobs/*.yml</code></td></tr>
+    <tr><td><b>Asset Bundles</b></td><td>6 variables, dev/demo targets with per-target trigger pausing, cross-resource refs, CI <code>bundle validate</code>, dashboard <code>generate</code> round-trip</td><td><code>databricks.yml</code>, <code>Makefile</code>, <code>.github/workflows/ci.yml</code></td></tr>
+    <tr><td><b>Delta &amp; SQL</b></td><td>Liquid clustering (<code>CLUSTER BY</code> with written anti-partitioning rationale), <code>OPTIMIZE</code>, <code>DESCRIBE HISTORY</code>, Statement Execution API with parameterized inserts</td><td><code>src/sql/02_optimize.sql</code>, <code>scripts/run_sql.py</code></td></tr>
+    <tr><td><b>Dashboards</b></td><td>Two AI/BI dashboards as bundle-managed code (property overview + agent-benchmark verdict), conditional formatting, <code>embed_credentials: false</code></td><td><code>dashboards/*.lvdash.json</code></td></tr>
+    <tr><td><b>Genie</b></td><td>Space-as-code (tables, instructions, example SQLs) and programmatic drive via the Conversations API in the benchmark</td><td><code>genie/propertyiq.genie.json</code>, <code>scripts/run_benchmark.py</code></td></tr>
+    <tr><td><b>MLflow &amp; registry</b></td><td>Experiments, UC registry, champion/challenger <b>aliases</b> with a holdout promotion gate, shared feature code against train/serve skew, PSI drift metrics</td><td><code>src/notebooks/ml/</code>, <code>src/lib/ml_*.py</code></td></tr>
+    <tr><td><b>Model serving</b></td><td>Serverless endpoint, scale-to-zero, pinned versions, secret-scope env fallback; <code>ai_query()</code> from plain SQL; <code>AI_FORECAST</code> vs trained model vs seasonal-naive backtest</td><td><code>resources/serving/</code>, <code>src/sql/03_ml_ai_query.sql</code>, <code>ml/05_forecast_compare.py</code></td></tr>
+    <tr><td><b>Agent Framework</b></td><td>LangGraph agent as a <code>ChatAgent</code> (models-from-code), declared resources for auth passthrough, <b><code>agents.deploy()</code> proven working on Free Edition</b>, Review App chat UI</td><td><code>src/lib/qa_agent*.py</code>, <code>scripts/register_agent.py</code></td></tr>
+    <tr><td><b>Agent evaluation</b></td><td>Golden set with confirm-gated verdicts, deterministic graders, 3-way benchmark (Genie vs LangGraph vs local Data Pilot) → Delta → verdict dashboard. LangGraph won 3/3 at 4–5× lower latency</td><td><code>evals/golden_qa.yaml</code>, <code>src/lib/agent_eval.py</code></td></tr>
+    <tr><td><b>Engineering hygiene</b></td><td>62 unit tests incl. local-Spark transform tests, ruff + CI, DuckDB parity check, everything reproducible via <code>make</code></td><td><code>tests/</code>, <code>scripts/parity_check.py</code></td></tr>
+  </table></div>
+</section>
+
+<section id="raglab" class="card">
+  <h2>transcript-rag-agent: zero Databricks code — but your strongest raw material</h2>
+  <div class="callout warn" style="margin-top:12px">
+    <b>Finding:</b> a full-tree search found <b>no Databricks platform usage at all</b> — no workspace auth, no Vector Search,
+    no UC, no serving, no Spark. The "Databricks chunks" are corpus <i>content</i>: the Databricks YouTube channel is the
+    largest source in the transcript corpus (8 videos), and GraphRAG clustered those chunks into their own
+    "unity catalog / MLflow / LLMOps" community. The only Databricks package is <code>databricks-sdk</code> pulled in
+    transitively by <code>mlflow-skinny</code>, never imported.
+  </div>
+  <p>What it <i>is</i>: <b>transcript·lab</b>, an evaluation-first RAG workbench — LangChain/LangGraph, ChromaDB, local MiniLM
+  embeddings, cross-encoder rerank, BM25 + RRF fusion, HyDE/multi-query, GraphRAG on Neo4j with Leiden communities, and a
+  serious eval stack: a chunk-level golden dataset, deterministic IR metrics (recall@k, MRR, NDCG), an 8-config ablation
+  sweep, RAGAS + a custom depth rubric, and CI eval-regression gates.</p>
+  <p><b>Why this matters for the interview:</b> every hard, transferable part of RAG — chunking strategy, retrieval fusion,
+  reranking, golden-set evaluation — already exists and is battle-tested. What's missing is the Databricks-native
+  substrate: Delta tables, Vector Search indexes, foundation-model embeddings, UC governance, and serving. That gap is a
+  porting exercise, not a research project — and porting it <i>is</i> project 1 below.</p>
+</section>
+
+<section id="coverage" class="card">
+  <h2>Coverage map: core Databricks feature areas vs your portfolio</h2>
+  <p>The feature areas an SA coding interview can reasonably draw from, scored against both repos.
+  <span class="tag ok">proven live</span> = working code verified against the workspace.
+  <span class="tag warn">partial</span> = touched but not the full story.
+  <span class="tag risk">gap</span> = nothing yet.</p>
+  <div class="table-wrap"><table>
+    <tr><th>#</th><th>Feature area</th><th>Status</th><th>Evidence / what's missing</th></tr>
+    <tr><td>1</td><td>Unity Catalog — schemas, volumes, table comments</td><td><span class="tag ok">proven live</span></td><td>All tables/volumes UC-managed; comments feed Genie. Grants/lineage are implicit on Free Edition (single <code>workspace</code> catalog) — know the <code>GRANT</code> syntax cold anyway.</td></tr>
+    <tr><td>2</td><td>Ingestion — Auto Loader, schema evolution</td><td><span class="tag ok">proven live</span></td><td>Both the jobs variant and the declarative-pipeline variant.</td></tr>
+    <tr><td>3</td><td>Lakeflow Declarative Pipelines — ST/MV, expectations</td><td><span class="tag ok">proven live</span></td><td>Serverless pipeline with warn + fail expectations.</td></tr>
+    <tr><td>4</td><td>Delta Lake — OPTIMIZE, liquid clustering, time travel</td><td><span class="tag ok">proven live</span></td><td>With a written clustering-vs-partitioning rationale.</td></tr>
+    <tr><td>5</td><td>Delta Lake — <b>MERGE, Change Data Feed, Auto CDC / SCD2</b></td><td><span class="tag risk">gap</span></td><td>The pipeline overwrites/appends; no MERGE upsert, no CDF, no SCD Type 2 anywhere. Classic DE interview territory. → <b>Project 2</b></td></tr>
+    <tr><td>6</td><td>Structured Streaming — continuous, watermarks, fan-in</td><td><span class="tag warn">partial</span></td><td>Only <code>availableNow</code> batch-incremental. No continuous trigger, watermarked aggregation, or append-flow fan-in. → <b>Project 2</b></td></tr>
+    <tr><td>7</td><td>Jobs — triggers, conditions, job-of-jobs</td><td><span class="tag ok">proven live</span></td><td>File-arrival + table-update triggers, condition task, run_job retrain loop.</td></tr>
+    <tr><td>8</td><td>Asset Bundles &amp; CI/CD</td><td><span class="tag ok">proven live</span></td><td>Multi-target, variables, CI validate, dashboard round-trip.</td></tr>
+    <tr><td>9</td><td>SQL warehouse &amp; Statement Execution API</td><td><span class="tag ok">proven live</span></td><td>Incl. parameterized inserts (SQL-injection-safe benchmark writes).</td></tr>
+    <tr><td>10</td><td>AI/BI dashboards</td><td><span class="tag ok">proven live</span></td><td>Two, fully bundle-managed.</td></tr>
+    <tr><td>11</td><td>Genie spaces</td><td><span class="tag ok">proven live</span></td><td>As-code config + API-driven benchmarking; grounding-rule findings documented.</td></tr>
+    <tr><td>12</td><td>MLflow — experiments, UC registry, aliases, promotion</td><td><span class="tag ok">proven live</span></td><td>Champion/challenger with holdout gate.</td></tr>
+    <tr><td>13</td><td>Model serving + AI functions (<code>ai_query</code>, <code>AI_FORECAST</code>)</td><td><span class="tag ok">proven live</span></td><td>Both proven; <code>spark_udf</code> confirmed broken on Free Edition (documented finding).</td></tr>
+    <tr><td>14</td><td>Agent Framework — ChatAgent, <code>agents.deploy</code></td><td><span class="tag ok">proven live</span></td><td>Working deploy chain incl. resource-based auth passthrough; quota behavior documented.</td></tr>
+    <tr><td>15</td><td>GenAI evaluation — <code>mlflow.genai.evaluate</code>, judges, traces</td><td><span class="tag warn">partial</span></td><td>Deterministic graders + benchmark exist (a strength!), but no MLflow-native judges/scorers or trace review. → <b>Projects 1 &amp; 3</b></td></tr>
+    <tr><td>16</td><td><b>Mosaic AI Vector Search — embeddings, RAG retrieval</b></td><td><span class="tag risk">gap</span></td><td>The single biggest gap. All RAG skill lives in transcript-lab on Chroma/MiniLM. → <b>Project 1</b></td></tr>
+    <tr><td>17</td><td><b>Databricks Apps</b> (custom UI) + <b>Lakebase</b></td><td><span class="tag risk">gap</span></td><td>D2 in s05 deferred Apps because the agents.deploy Review App sufficed. Still unprobed on Free Edition. → <b>Project 3</b></td></tr>
+    <tr><td>18</td><td>Lakehouse Monitoring / inference tables</td><td><span class="tag warn">partial</span></td><td>Hand-rolled PSI drift exists; native monitoring + endpoint inference tables untouched. → <b>Project 3</b></td></tr>
+  </table></div>
+  <p style="margin-top:14px" class="callout">Out of scope on Free Edition (know the concepts, don't build): external Kafka/Kinesis
+  sources (no egress), classic clusters &amp; instance pools (serverless-only), Delta Sharing across metastores, Photon tuning
+  at scale, Terraform provider. Say so confidently in the interview — knowing the constraint is itself a signal.</p>
+</section>
+
+<section id="projects">
+  <div class="kicker" style="margin-bottom:4px">three candidate projects, ranked</div>
+  <h2 style="font-size:22px">Each one closes a different row-set of the map</h2>
+  <div class="proj-grid">
+
+    <div class="card proj">
+      <span class="rank">1 · RECOMMENDED FIRST</span>
+      <h3>lakehouse-rag — port transcript·lab to Databricks</h3>
+      <div class="sub">closes rows 15 · 16 — the GenAI/RAG round</div>
+      <p style="font-size:14px">Re-land the transcript corpus as Delta tables (chunks already exist with timestamps + headers),
+      stand up a <b>Vector Search delta-sync index</b> with Databricks-managed embeddings (<code>databricks-gte-large-en</code>),
+      and wire a retriever tool into a ChatAgent — the same deploy chain you've already proven. Then the signature move:
+      <b>re-run transcript-lab's own golden dataset and IR metrics (recall@k, MRR, NDCG) against the Databricks index vs the
+      Chroma baseline</b>, scored side-by-side on a verdict dashboard, and annotate runs with
+      <code>mlflow.genai</code> judges + traces.</p>
+      <div class="unlocks">
+        <span class="chip">Vector Search</span><span class="chip">FM embeddings</span>
+        <span class="chip">mlflow.genai eval</span><span class="chip">MLflow traces</span><span class="chip">RAG ChatAgent</span>
+      </div>
+      <dl>
+        <dt>Reuses</dt><dd>transcript-lab's chunking, golden dataset, <code>ir_metrics.py</code>, eval-first methodology; propertyiq's agent-deploy + benchmark + dashboard patterns.</dd>
+        <dt>Free Edition risk</dt><dd><span class="tag warn">probe first</span> Vector Search endpoint availability/quota is unverified. Fallback if blocked: <code>ai_query()</code> embeddings into a Delta column + cosine <code>vector_search</code>-style SQL — still a legitimate RAG story.</dd>
+        <dt>Why first</dt><dd>RAG is the canonical SA GenAI exercise, it's your largest gap, and the eval assets make it a comparison story ("measured Chroma vs Vector Search") rather than a toy demo.</dd>
+      </dl>
+    </div>
+
+    <div class="card proj">
+      <span class="rank alt">2</span>
+      <h3>propertyiq-cdc — SCD2 &amp; MERGE on the listings feed</h3>
+      <div class="sub">closes rows 5 · 6 — the data-engineering round</div>
+      <p style="font-size:14px">Your landing feed is already updates-only — a natural CDC source. Extend the declarative
+      pipeline with <b><code>AUTO CDC INTO</code> building an SCD Type 2</b> history of property records
+      (<code>__START_AT</code>/<code>__END_AT</code> point-in-time queries), <b>append flows</b> fanning sales + lodgements into one
+      streaming table, <b>Change Data Feed</b> to propagate gold incrementally, and a hand-written <code>MERGE</code> backfill
+      to show you can do it both ways. Add one watermarked streaming aggregation to round out streaming semantics.</p>
+      <div class="unlocks">
+        <span class="chip">Auto CDC / SCD2</span><span class="chip">MERGE</span><span class="chip">CDF</span>
+        <span class="chip">append flows</span><span class="chip">watermarks</span>
+      </div>
+      <dl>
+        <dt>Reuses</dt><dd>The existing pipeline variant, feed contract, tests, and bundle — this is an extension, not a new repo.</dd>
+        <dt>Free Edition risk</dt><dd><span class="tag ok">low</span> All of it runs on serverless declarative pipelines; no external sources needed.</dd>
+        <dt>Why second</dt><dd>Most likely coding-round topic for a DE-flavored interview; cheapest to build; but it extends strength rather than closing your biggest gap.</dd>
+      </dl>
+    </div>
+
+    <div class="card proj">
+      <span class="rank alt">3</span>
+      <h3>qa-agent-app — a real chat app + native observability</h3>
+      <div class="sub">closes rows 17 · 18 — the architecture/app round</div>
+      <p style="font-size:14px">Give the deployed QA agent a proper front-end: a <b>Databricks App</b> (chat UI calling the
+      agent endpoint), <b>Lakebase Postgres</b> for conversation history and feedback thumbs, endpoint
+      <b>inference tables</b> feeding a usage/quality dashboard, and <code>mlflow.genai</code> judges scoring live
+      conversations against the golden graders — closing the observability loop the benchmark started.</p>
+      <div class="unlocks">
+        <span class="chip">Databricks Apps</span><span class="chip">Lakebase</span>
+        <span class="chip">inference tables</span><span class="chip">live eval loop</span>
+      </div>
+      <dl>
+        <dt>Reuses</dt><dd>The deployed agent endpoint, benchmark graders, dashboard patterns.</dd>
+        <dt>Free Edition risk</dt><dd><span class="tag warn">probe first</span> Apps and Lakebase availability/quotas on Free Edition are both unverified (s05's D2 deferred this exact probe).</dd>
+        <dt>Why third</dt><dd>Great demo-day material and a natural s08 after project 1, but the interview weight of Apps/Lakebase is lower than RAG or CDC.</dd>
+      </dl>
+    </div>
+
+  </div>
+  <div class="callout" style="margin-top:18px"><b>Recommended order: 1 → 2 → 3.</b> Project 1 closes the biggest gap with the
+  best story-per-hour (the eval harness is already written). Project 2 is the cheapest insurance for a DE coding round.
+  Project 3 turns the whole portfolio into a demo. Together they take the map to 18/18.</div>
+</section>
+
+<section id="decide" class="card">
+  <h2>Decide: which project should be planned first?</h2>
+  <p style="font-size:14px">Pick one and I'll draft the full lavish plan for it (phases, Free Edition probes, golden criteria) as s08.
+  You can also annotate any row or card above with changes first.</p>
+  <form class="q-form" data-lavish-question="next-project"
+    onsubmit="event.preventDefault();var f=event.currentTarget;var c=new FormData(f).get('proj');if(!c)return;var n=f.querySelector('textarea').value.trim();var msg='Plan project '+c+' next as s08.'+(n?' Notes: '+n:'');window.lavish.queuePrompt(msg,{tag:'choice',text:'Next project: '+c,element:f,data:{question:'next-project',answer:c,notes:n}});f.classList.add('is-queued');">
+    <h3>Next project to plan</h3>
+    <label><input type="radio" name="proj" value="1 — lakehouse-rag (port transcript-lab to Vector Search)" checked>
+      <span><b>1 · lakehouse-rag</b> — Vector Search + RAG ChatAgent + Chroma-vs-Databricks eval <span class="tag ok">recommended</span></span></label>
+    <label><input type="radio" name="proj" value="2 — propertyiq-cdc (SCD2, MERGE, CDF, append flows)">
+      <span><b>2 · propertyiq-cdc</b> — SCD2 / MERGE / CDF extension of the existing pipeline</span></label>
+    <label><input type="radio" name="proj" value="3 — qa-agent-app (Databricks App + Lakebase + inference tables)">
+      <span><b>3 · qa-agent-app</b> — chat app + native observability over the deployed agent</span></label>
+    <textarea placeholder="Optional notes — scope tweaks, timeline, anything to fold into the plan…"></textarea>
+    <button type="submit">Queue this choice</button><span class="queued">✓ queued — press Send to Agent when ready</span>
+  </form>
+</section>
+
+<footer>s07 · reviewed 2 repos · propertyiq main @ 0592b4e · transcript-rag-agent (no Databricks code — porting source)</footer>
+</main>
+</body>
+</html>
