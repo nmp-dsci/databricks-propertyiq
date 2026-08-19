@@ -449,6 +449,21 @@ default). `custom_outputs` returns the retrieved chunk keys and the decision
 log, which is what lets the eval score *retrieval* rather than only prose.
 Answers cite video title and timestamp. `agents.deploy` gives it a Review App.
 
+**Real-time tracing on the deployed endpoint** needs two things beyond a
+recent `mlflow`, both easy to miss because they fail silently rather than
+erroring: `databricks-agents>=1.2.0` in the model's `pip_requirements` (it has
+to be baked into the *serving image*, not just installed on the laptop, or the
+Traces tab shows "Upgrade to MLflow 3 to enable real-time tracing" regardless
+of the `mlflow` version), and explicit spans, since this agent calls FMAPI and
+Vector Search via `databricks-sdk` rather than `databricks-langchain` (same
+tradeoff as `qa_agent`, above) so no autologger captures those calls. `ask()`
+carries an `@mlflow.trace(span_type="AGENT")` root — serving opens no root span
+of its own for a `ChatAgent`, so without it every retriever and LLM call below
+would land as its own orphan trace instead of one tree — and `retrieve`/`llm`
+are traced as `RETRIEVER`/`LLM` respectively. The `mode` tag is applied inside
+`ask()` via `mlflow.update_current_trace`, not in `ChatAgentModel.predict`,
+because no trace exists to tag until `ask()` opens one.
+
 **The verdict** (`make rag-eval`, dashboard `rag_eval.lvdash.json`) runs the
 golden set against three retrievers so each comparison moves one variable:
 
