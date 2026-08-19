@@ -27,7 +27,7 @@ resources:
         - name: holdout_months
           default: "6"
         # Was resolved from the serving resource, which is parked while the
-        # single Free Edition endpoint slot holds rag_transcript_agent (see
+        # two Free Edition endpoint slots are held by the agents (see
         # resources/serving/rent_estimator_endpoint.yml). The name is a
         # variable now so un-parking that resource does not require editing
         # this job as well.

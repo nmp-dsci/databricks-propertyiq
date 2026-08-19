@@ -1,14 +1,16 @@
-# PARKED — Free Edition allows exactly one custom model-serving endpoint, and
-# that slot currently holds rag_transcript_agent (deployed by
-# scripts/register_rag_agent.py via agents.deploy).
+# PARKED — Free Edition caps custom model-serving endpoints at two, and both
+# slots currently hold agents: qa_agent (scripts/register_agent.py) and
+# rag_transcript_agent (scripts/register_rag_agent.py), each via agents.deploy.
 #
-# Deploying this resource alongside it fails the whole bundle with
-# "You've hit the limit for endpoints for free usage", which also blocks every
-# unrelated resource in the same deploy — so the block below is commented out
-# rather than left to fail.
+# Deploying this as a third endpoint fails the whole bundle with "You've hit
+# the limit for endpoints for free usage", which also blocks every unrelated
+# resource in the same deploy — so the block below is commented out rather than
+# left to fail.
 #
-# To bring the rent estimator back:
-#   1. databricks serving-endpoints delete agents_workspace-rag-rag_transcript_agent
+# To bring the rent estimator back, free one slot by deleting either agent
+# endpoint (the QA agent is the cheaper one to lose — the benchmark can still
+# run its graph locally):
+#   1. databricks serving-endpoints delete agents_workspace-propertyiq_ml-qa_agent
 #   2. uncomment the block below
 #   3. make deploy
 # Nothing else is lost in the meantime: the model itself is still registered at

@@ -31,8 +31,8 @@ variables:
   rent_estimator_endpoint:
     description: >-
       Serving endpoint name for the rent estimator. Currently PARKED — Free
-      Edition allows one custom serving endpoint and rag_transcript_agent holds
-      it (see resources/serving/rent_estimator_endpoint.yml). In dev the
+      Edition caps custom serving endpoints at two and both are held by the
+      agents (see resources/serving/rent_estimator_endpoint.yml). In dev the
       deployed endpoint carried a `dev_<user>_` prefix; this default matches the
       un-prefixed production name.
     default: propertyiq-rent-estimator

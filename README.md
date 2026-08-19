@@ -22,7 +22,7 @@ resources/
   jobs/ml_forecast.yml         AI_FORECAST vs trained model vs seasonal-naive comparison
   jobs/rag_ingest.yml          bronze land → silver merge → checks → index sync, file-arrival triggered
   pipelines/medallion_pipeline.yml  Declarative Pipeline variant of the medallion, side by side
-  serving/rent_estimator_endpoint.yml  parked — Free Edition allows one custom endpoint, rag_transcript_agent holds it
+  serving/rent_estimator_endpoint.yml  parked — Free Edition caps custom endpoints at two, both taken by the agents
   dashboards/property_overview.yml
   dashboards/agent_benchmark.yml       verdict dashboard for the QA-agent benchmark
   dashboards/rag_eval.yml              verdict dashboard for the RAG retrieval benchmark
@@ -499,7 +499,7 @@ than scored as a silent miss.
 | `langgraph` not preinstalled on serverless job compute | Agent registration (`make register-agent`) and the QA-agent benchmark (`make benchmark`) run locally, not as workspace jobs |
 | Vector Search **delta-sync** indexes never provision | Their backing pipeline sits on "pending setup of pipeline resources" indefinitely, even though the endpoint reports ONLINE and **direct-access indexes work fine**. `04_index_sync.py` therefore does by hand what delta-sync would do: embed changed chunks with `ai_query`, upsert them, keyed on `text_sha` so nothing is re-embedded needlessly |
 | Vector Search queries reject control-plane calls | The index lives behind its own data-plane host, so a raw `api_client.do` query returns `PermissionDenied` — use the typed `w.vector_search_indexes.query_index` instead (upserts, oddly, work either way) |
-| **One** custom model-serving endpoint | The rent estimator's endpoint is parked (`resources/serving/rent_estimator_endpoint.yml`) so `rag_transcript_agent` can hold the slot; leaving both declared failed every bundle deploy. Swapping back is a documented two-step |
+| **Two** custom model-serving endpoints | Both slots are held by agents (`qa_agent`, `rag_transcript_agent`), so the rent estimator's endpoint is parked (`resources/serving/rent_estimator_endpoint.yml`) — a third fails the whole bundle deploy, not just its own resource. Swapping back is a documented two-step |
 
 Sources: [Free Edition limitations](https://docs.databricks.com/aws/en/getting-started/free-edition-limitations)
 
