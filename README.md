@@ -23,17 +23,22 @@ resources/
   pipelines/medallion_pipeline.yml  Declarative Pipeline variant of the medallion, side by side
   serving/rent_estimator_endpoint.yml  scale-to-zero serving endpoint for the champion model
   dashboards/property_overview.yml
+  dashboards/agent_benchmark.yml       verdict dashboard for the QA-agent benchmark
 genie/propertyiq.genie.json    Genie space definition (checked in for reproducibility, not a bundle resource)
 src/
   notebooks/*.py               Databricks source-format notebooks (render as notebooks up there)
   notebooks/ml/*.py            feature build, train/register/gate, batch score, drift, forecast compare
   lib/transforms.py            the medallion logic — pure, unit-tested, no I/O
   lib/ml_features.py, ml_model.py, ml_forecast.py, ml_monitoring.py   the ML logic — same pattern
+  lib/qa_agent.py               the LangGraph QA agent — route → plan_sql → execute → reflect → answer
+  lib/qa_agent_model.py         MLflow models-from-code entrypoint (the agent as a ChatAgent)
+  lib/agent_eval.py             deterministic graders for the QA-agent benchmark
   pipelines/propertyiq/        the Declarative Pipeline variant's transformations (own README)
   sql/*.sql                    warehouse queries, runnable from the terminal
-dashboards/*.lvdash.json       AI/BI dashboard, deployed as code
+dashboards/*.lvdash.json       AI/BI dashboards, deployed as code
+evals/golden_qa.yaml           confirmed golden Q&A set for the QA-agent benchmark
 tests/                         local Spark tests, no workspace required
-scripts/                       setup, auth, SQL runner, gold/dbt parity check
+scripts/                       setup, auth, SQL runner, gold/dbt parity check, agent register + benchmark
 ```
 
 ### The one trick that makes this work
@@ -103,11 +108,14 @@ Dashboards are miserable to hand-edit as JSON and excellent to edit in the UI, s
 the workflow is a round-trip:
 
 ```bash
-make deploy           # 1. push dashboards/property_overview.lvdash.json
+make deploy           # 1. push both dashboards/*.lvdash.json
                       # 2. rearrange / restyle in the Databricks UI
-make pull-dashboard   # 3. write the UI version back into the repo
+make pull-dashboard   # 3. write the UI version of both back into the repo
 git commit            # 4. it's code again
 ```
+
+`pull-dashboard` loops over both dashboard resources — `property_overview` and
+`agent_benchmark` — so a UI edit to either one round-trips the same way.
 
 `embed_credentials: false` in the resource means a deploy **errors** rather than
 silently overwriting UI edits you forgot to pull.
@@ -313,6 +321,74 @@ identifier or id, and each entry needs a caller-supplied lowercase 32-hex id.
 
 ---
 
+## QA-agent benchmark: Genie vs LangGraph vs Data Pilot
+
+Three ways to answer natural-language questions over the gold marts, scored
+against the same confirmed golden question set: the Genie space above, a new
+LangGraph agent, and the external `data-qa-agent` app ("Data Pilot", the
+sibling project this pipeline's dbt logic was ported from).
+
+**`src/lib/qa_agent.py`** is a deliberate port of Data Pilot's data-agent —
+the same graph (`route → plan_sql → execute → reflect → answer`, with a
+decision log at every step) re-grounded on the Unity Catalog gold tables and
+the serverless SQL warehouse instead of dbt's manifest and Postgres. The graph
+is dependency-injected (an LLM callable, a SQL executor), so `tests/test_qa_agent.py`
+exercises the whole flow — routing, SQL guardrails, retry-on-error, refusal —
+without a network call. `make_databricks_agent` wires the real pieces: FMAPI
+via `databricks-sdk` for the LLM leg and the Statement Execution API for SQL.
+`databricks-sdk` is used instead of `databricks-langchain` deliberately —
+the latter drags in `databricks-connect`, which shadows local `pyspark` and
+would break the Spark unit tests.
+
+**`src/lib/qa_agent_model.py`** wraps the graph as an MLflow `ChatAgent`
+(models-from-code), so the same file serves the registered model, the
+deployed endpoint, and local parity testing. Configuration is environment
+variables, with the repo's standing warehouse id (`7f9b6eb116a15acc`) as the
+default.
+
+**`scripts/register_agent.py`** (`make register-agent`) logs and registers
+the agent to `propertyiq_ml.qa_agent`, smoke-tests it locally, then stands up
+a serving endpoint — trying `agents.deploy()` first and falling back to a
+plain CPU serving endpoint. It declares the LLM endpoint, SQL warehouse and
+the three gold tables as model resources at log time, since `agents.deploy`'s
+auto-auth needs them declared to avoid `INSUFFICIENT_PERMISSIONS`. This runs
+**locally**, not as a workspace job — `langgraph` isn't preinstalled on
+serverless job compute, and logging from the laptop needs nothing
+workspace-side.
+
+**`evals/golden_qa.yaml`** is the confirmed golden question set: each case
+has a question, a grader spec, and an answer computed by deterministic SQL
+against the gold tables and confirmed by hand. Notably, "currently" /
+"right now" is defined as the *latest month present in the data* — a reading
+Genie's own trailing-12-month default legitimately fails.
+
+**`src/lib/agent_eval.py`** grades an agent's free-text answer against the
+golden case deterministically (no LLM judge decides pass/fail): `value`
+(a number within tolerance), `topk` (mentions enough of the expected keys),
+or `refusal` (declines rather than fabricates, for out-of-scope questions).
+
+**`scripts/run_benchmark.py`** (`make benchmark`) runs every golden case
+through all three contenders and writes results to
+`workspace.propertyiq_ml.agent_benchmark` on the warehouse. It runs
+**locally**, not as a workspace job, because only the laptop can reach all
+three: Genie and the deployed LangGraph endpoint are workspace HTTPS APIs,
+but Data Pilot is the `data-qa-agent` stack on `localhost:8010`. The
+LangGraph agent is queried through its deployed serving endpoint over raw
+`/invocations` (ChatAgent endpoints reply with `{"messages": [...]}`, not the
+chat-completions `choices` shape the SDK helper expects), falling back to
+running the graph in-process if the endpoint isn't ready.
+
+```bash
+make register-agent   # log + register the agent, stand up its endpoint
+make benchmark        # run all three contenders over the golden set
+```
+
+**`dashboards/agent_benchmark.lvdash.json`** (`resources/dashboards/agent_benchmark.yml`)
+is the verdict dashboard, deployed like `property_overview` — pass rates and
+latency per contender, read straight from `agent_benchmark`.
+
+---
+
 ## Free Edition constraints, and what each one forced
 
 | Constraint | Consequence here |
@@ -325,6 +401,7 @@ identifier or id, and each entry needs a caller-supplied lowercase 32-hex id.
 | Non-commercial use only | Public open government data only (NSW Valuer General, Rental Bond Board) — no proprietary or customer data |
 | `mlflow.pyfunc.spark_udf` broken on serverless | Batch scoring (`03_batch_score.py`) predicts driver-side with pandas instead of a distributed UDF — also the right scale for ~2.5k rows/month |
 | Serving config pins a model version, not a UC alias | The training notebook rolls the endpoint's pinned version forward in the same run that flips `@champion` |
+| `langgraph` not preinstalled on serverless job compute | Agent registration (`make register-agent`) and the QA-agent benchmark (`make benchmark`) run locally, not as workspace jobs |
 
 Sources: [Free Edition limitations](https://docs.databricks.com/aws/en/getting-started/free-edition-limitations)
 

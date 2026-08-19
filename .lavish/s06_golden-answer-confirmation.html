@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PropertyIQ agent bench — golden answers &amp; first verdict</title>
+<script>
+  (function(){
+    var t; try{t=localStorage.getItem('s06-theme')}catch(e){}
+    var mq=window.matchMedia('(prefers-color-scheme: dark)');
+    if(t!=='light'&&t!=='dark'){t=mq.matches?'dark':'light'}
+    document.documentElement.setAttribute('data-theme',t);
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#F4F6F3; --panel:#FFFFFF; --panel-2:#FAFBF9; --ink:#14181C; --ink-soft:#3E4A44;
+  --muted:#5A655D; --faint:#77837A; --line:#DDE4DC; --line-2:#C9D2C9;
+  --signal:#17876B; --signal-soft:#E4F1EC; --amber:#B26A12; --amber-soft:#F6ECDC;
+  --fail:#A8402F; --fail-soft:#F4E2DE;
+  --chip-bg:#E4F1EC; --chip-ink:#11674F; --hover:#FAFBF9;
+  --nav-bg:rgba(244,246,243,.85); --grid-line:rgba(16,22,19,.028);
+  --hero-glow:rgba(23,135,107,.07); --pre-bg:#14181C; --pre-ink:#E8ECE9;
+  --shadow:0 1px 2px rgba(16,22,19,.04),0 10px 26px -14px rgba(16,22,19,.16);
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --w:1120px;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#101511; --panel:#171E19; --panel-2:#1C2420; --ink:#E8EDE9; --ink-soft:#C3CCC5;
+  --muted:#96A29A; --faint:#71807A; --line:#242E27; --line-2:#33413A;
+  --signal:#43C29A; --signal-soft:#173428; --amber:#D19243; --amber-soft:#2A2113;
+  --fail:#E0715C; --fail-soft:#2E1A16;
+  --chip-bg:#173428; --chip-ink:#7FDDBB; --hover:#1C2420;
+  --nav-bg:rgba(16,21,17,.85); --grid-line:rgba(232,237,233,.035);
+  --hero-glow:rgba(67,194,154,.09); --pre-bg:#0B0F0C; --pre-ink:#DEE5E0;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 10px 26px -14px rgba(0,0,0,.55);
+}
+*,*::before,*::after{box-sizing:border-box;min-width:0}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.62;letter-spacing:-.005em;
+  background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:34px 34px;transition:background-color .2s,color .2s}
+a{color:var(--signal);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:3px}
+h1,h2,h3,h4{font-weight:600;letter-spacing:-.02em;line-height:1.2;margin:0}
+:where(p,h1,h2,h3,h4,li,td,th,summary,label,button){overflow-wrap:anywhere}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 12px}
+.nav{position:sticky;top:0;z-index:50;background:var(--nav-bg);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav-inner{max-width:var(--w);margin:0 auto;padding:11px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px;color:var(--ink)}
+.brand b{font-size:15px;font-weight:600}
+.brand span{font-family:var(--mono);font-size:12px;color:var(--faint)}
+.nav-links{display:flex;gap:16px;flex-wrap:wrap;font-size:13.5px}
+.nav-links a{color:var(--muted)}
+.theme-btn{border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:8px;padding:5px 10px;font-family:var(--mono);font-size:12px;cursor:pointer}
+main{max-width:var(--w);margin:0 auto;padding:30px 22px 90px}
+section{margin-top:48px}
+.hero{padding:38px 0 6px;background:radial-gradient(700px 260px at 20% 0%,var(--hero-glow),transparent)}
+.hero h1{font-size:clamp(25px,4vw,36px);max-width:26ch}
+.hero p.lede{font-size:17px;color:var(--ink-soft);max-width:80ch;margin:16px 0 0}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip-bg);color:var(--chip-ink);border-radius:999px;padding:3px 12px;font-family:var(--mono);font-size:12px;font-weight:500}
+.chip.warn{background:var(--amber-soft);color:var(--amber)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:22px 24px}
+.card h2{font-size:21px;margin-bottom:6px}
+.card h3{font-size:16px}
+p{margin:10px 0}
+ul{margin:10px 0;padding-left:22px}
+li{margin:5px 0}
+code{font-family:var(--mono);font-size:.88em;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+pre{background:var(--pre-bg);color:var(--pre-ink);border-radius:10px;padding:13px 15px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.55;margin:10px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line-2)}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.tag{display:inline-block;font-family:var(--mono);font-size:11px;border-radius:5px;padding:1px 7px;font-weight:500;white-space:nowrap}
+.tag.ok{background:var(--signal-soft);color:var(--signal)}
+.tag.warn{background:var(--amber-soft);color:var(--amber)}
+.tag.risk{background:var(--fail-soft);color:var(--fail)}
+.callout{border-left:3px solid var(--signal);background:var(--signal-soft);border-radius:0 10px 10px 0;padding:12px 16px;font-size:14.5px;color:var(--ink-soft)}
+.callout.warn{border-color:var(--amber);background:var(--amber-soft)}
+.answer{border:1px solid var(--line);border-radius:10px;padding:12px 15px;margin-top:10px;background:var(--panel-2);font-size:14px}
+.answer .who{display:flex;gap:8px;align-items:baseline;margin-bottom:5px;font-family:var(--mono);font-size:12px;color:var(--faint)}
+.answer.golden{border-color:var(--signal);background:var(--signal-soft)}
+.q-form{background:var(--panel);border:1px solid var(--line-2);border-radius:12px;padding:16px 18px;margin-top:14px}
+.q-form h3{font-size:15px;margin-bottom:4px}
+.q-form label{display:flex;gap:10px;align-items:flex-start;padding:7px 10px;border:1px solid var(--line);border-radius:9px;margin-top:8px;cursor:pointer;font-size:14px}
+.q-form label:hover{background:var(--hover)}
+.q-form input[type=radio]{margin-top:4px}
+.q-form textarea{width:100%;margin-top:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);color:var(--ink);font-family:var(--sans);font-size:13.5px;padding:8px 10px;min-height:40px}
+.q-form button{margin-top:10px;background:var(--signal);color:#fff;border:none;border-radius:8px;padding:7px 15px;font-family:var(--sans);font-size:13.5px;font-weight:600;cursor:pointer}
+.q-form button:hover{filter:brightness(1.08)}
+.q-form .queued{display:none;margin-left:10px;font-family:var(--mono);font-size:12px;color:var(--signal)}
+.q-form.is-queued .queued{display:inline}
+footer{margin-top:70px;color:var(--faint);font-size:13px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <div class="brand"><b>PropertyIQ · s06</b><span>golden answers &amp; first verdict</span></div>
+  <div class="nav-links">
+    <a href="#verdict">Verdict</a><a href="#case1">Case 1 · rent</a><a href="#case2">Case 2 · sales</a>
+    <a href="#case3">Case 3 · yield</a><a href="#findings">Findings</a>
+  </div>
+  <button class="theme-btn" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('s06-theme',n)}catch(e){}">theme</button>
+</div></nav>
+
+<main>
+<div class="hero">
+  <p class="kicker">agent_bench · confirmation review (decision D3)</p>
+  <h1>Three agents answered the seed questions. Now confirm what "right" is.</h1>
+  <p class="lede">All three contenders ran live against the 3-question seed set: the <b>Genie space</b> over its Conversations API, the <b>LangGraph agent</b> served at <code>agents_workspace-propertyiq_ml-qa_agent</code> (v3, auto-auth via declared resources), and <b>Data Pilot</b> over its local <code>/ask</code> API. Below, each case shows the golden SQL, the computed candidate answer, and every agent's actual reply — <b>confirm, edit or drop each golden answer</b>; only confirmed cases count toward the verdict.</p>
+  <div class="badges">
+    <span class="chip">final run in propertyiq_ml.agent_benchmark</span>
+    <span class="chip">verdict dashboard deployed</span>
+    <span class="chip warn">all 3 cases: authoring_status draft</span>
+  </div>
+</div>
+
+<section id="verdict" class="card">
+  <h2>The first verdict (unconfirmed goldens)</h2>
+  <div class="table-wrap" style="margin-top:10px">
+    <table>
+      <thead><tr><th>Agent</th><th>Score</th><th>Avg latency</th><th>Where it lost points</th></tr></thead>
+      <tbody>
+        <tr><td><b>LangGraph agent</b> (deployed endpoint)</td><td><span class="tag ok">3 / 3</span></td><td><b>5.2s</b></td><td>— clean sweep, and fastest by 4-5×</td></tr>
+        <tr><td><b>Genie space</b></td><td><span class="tag warn">2 / 3</span></td><td>25.0s</td><td>Yield: interprets "currently" as a trailing-12-month aggregate with its own floors — top list barely overlaps the latest-month golden</td></tr>
+        <tr><td><b>Data Pilot</b> (local, data to 2026-05)</td><td><span class="tag warn">2 / 3</span></td><td>24.6s</td><td>Rent: answered "<b>$10</b> as of 2026-05" — a real formatting/hallucination bug (the correct value was in its own result rows)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="sub" style="color:var(--muted);font-size:13.5px">Scores are the deterministic graders (<code>src/lib/agent_eval.py</code>) on the final run; earlier runs showed real run-to-run variance in Data Pilot (1/3 → 3/3 → 2/3), which is itself a benchmark finding.</p>
+</section>
+
+<section id="case1" class="card">
+  <h2>Case 1 · rent (T1 lookup)</h2>
+  <p><b>"What's the median weekly rent for a 2-bedroom unit in postcode 2000 right now?"</b></p>
+  <pre>SELECT month, median_weekly_rent, n_rented
+FROM workspace.propertyiq.gold_property_rent
+WHERE postcode = '2000' AND property_type = 'unit' AND bedroom_band = '2'
+  AND month = (SELECT max(month) FROM workspace.propertyiq.gold_property_rent)</pre>
+  <div class="answer golden"><div class="who">GOLDEN CANDIDATE · grader: value within 5% of 1350</div>$1,350 per week as at 2026-07 (173 bonds lodged that month).</div>
+  <div class="answer"><div class="who">GENIE <span class="tag ok">PASS</span> 28.4s</div>"…most recent median weekly rent for 2-bedroom units in postcode 2000" → [{month: 2026-07-01, median_weekly_rent: 1350.0}] — correct value, correct month.</div>
+  <div class="answer"><div class="who">LANGGRAPH <span class="tag ok">PASS</span> 4.7s</div>"The median weekly rent for a 2-bedroom unit in postcode 2000 is $1350.0, based on the latest month of data…"</div>
+  <div class="answer"><div class="who">DATA PILOT <span class="tag risk">FAIL</span> 13.1s</div>"Median weekly rent for a 2-bedroom unit in postcode 2000 is <b>$10</b> as of 2026-05." — the correct value ($1,400 at 2026-05) was present in its own result rows; the phrased headline is wrong. Genuine bug in Data Pilot's report phrasing.</div>
+  <form class="q-form" data-lavish-question="case1" onsubmit="event.preventDefault();var f=new FormData(event.currentTarget),c=f.get('d'),n=f.get('notes')||'';if(c){window.lavish.queuePrompt('Case 1 (rent) golden answer: '+c+(n?' — notes: '+n:''),{tag:'choice',text:'Case 1: '+c,element:event.currentTarget,data:{case:'rent-median-2bed-unit-2000-latest',decision:c,notes:n}});event.currentTarget.classList.add('is-queued')}">
+    <h3>Confirm this golden answer?</h3>
+    <label><input type="radio" name="d" value="confirmed"><span><b>Confirm</b> — $1,350 at latest month (2026-07), 5% tolerance</span></label>
+    <label><input type="radio" name="d" value="edit"><span><b>Edit</b> — describe the change in notes below</span></label>
+    <label><input type="radio" name="d" value="dropped"><span><b>Drop</b> the case</span></label>
+    <textarea name="notes" placeholder="optional notes…"></textarea>
+    <button type="submit">Queue decision</button><span class="queued">queued ✓</span>
+  </form>
+</section>
+
+<section id="case2" class="card">
+  <h2>Case 2 · sales (T3 trap: re-aggregation + volume floor)</h2>
+  <p><b>"Which postcodes had the highest average house sale price over the last 12 months?"</b></p>
+  <pre>SELECT postcode, ROUND(SUM(total_sale_value)/SUM(n_sold), 0) AS avg_house_price, SUM(n_sold) AS n_sold
+FROM workspace.propertyiq.gold_property_sales
+WHERE property_type = 'house'
+  AND month &gt; add_months((SELECT max(month) FROM workspace.propertyiq.gold_property_sales), -12)
+GROUP BY postcode HAVING SUM(n_sold) &gt;= 30
+ORDER BY avg_house_price DESC LIMIT 10</pre>
+  <div class="answer golden"><div class="who">GOLDEN CANDIDATE · grader: ≥3 of {2063, 2030, 2095, 2088, 2026} named</div>Top postcodes (12 months to 2026-07, min 30 sales): 2063 ($5.10M), 2030 ($5.07M), 2095 ($4.76M), 2088 ($4.76M), 2026 ($4.73M).</div>
+  <div class="answer"><div class="who">GENIE <span class="tag ok">PASS</span> 19.6s</div>Top 20 with a ≥20-sales floor — 2063, 2030, 2095, 2088, 2026 all present. Applied re-aggregation and a floor unprompted (its space instructions encode both).</div>
+  <div class="answer"><div class="who">LANGGRAPH <span class="tag ok">PASS</span> 6.0s</div>"…top 10: 2063 ($5,118,638), 2030 ($5,066,420), 2095 ($4,950,872)…" — re-aggregated additive legs with a floor, per the ported grounding rules.</div>
+  <div class="answer"><div class="who">DATA PILOT <span class="tag ok">PASS</span> 27.6s</div>"The average is computed from the additive total sale value divided by the number sold…" — names the expected leaders. (In an earlier run it answered with only a single postcode — run-to-run variance.)</div>
+  <form class="q-form" data-lavish-question="case2" onsubmit="event.preventDefault();var f=new FormData(event.currentTarget),c=f.get('d'),n=f.get('notes')||'';if(c){window.lavish.queuePrompt('Case 2 (sales) golden answer: '+c+(n?' — notes: '+n:''),{tag:'choice',text:'Case 2: '+c,element:event.currentTarget,data:{case:'sales-top-avg-house-price-12m',decision:c,notes:n}});event.currentTarget.classList.add('is-queued')}">
+    <h3>Confirm this golden answer?</h3>
+    <label><input type="radio" name="d" value="confirmed"><span><b>Confirm</b> — top-5 keys {2063, 2030, 2095, 2088, 2026}, ≥3 hits to pass</span></label>
+    <label><input type="radio" name="d" value="edit"><span><b>Edit</b> — describe the change in notes below</span></label>
+    <label><input type="radio" name="d" value="dropped"><span><b>Drop</b> the case</span></label>
+    <textarea name="notes" placeholder="optional notes…"></textarea>
+    <button type="submit">Queue decision</button><span class="queued">queued ✓</span>
+  </form>
+</section>
+
+<section id="case3" class="card">
+  <h2>Case 3 · yield (T2 ranking) — needs your adjudication</h2>
+  <p><b>"Which postcodes currently give the best gross rental yield for units?"</b></p>
+  <pre>SELECT postcode, ROUND(gross_yield_pct, 2) AS gross_yield_pct, n_sold, n_rented
+FROM workspace.propertyiq.gold_property_yield
+WHERE property_type = 'unit'
+  AND month = (SELECT max(month) FROM workspace.propertyiq.gold_property_yield)
+  AND n_sold &gt;= 5 AND n_rented &gt;= 10
+ORDER BY gross_yield_pct DESC LIMIT 10</pre>
+  <div class="answer golden"><div class="who">GOLDEN CANDIDATE · grader: ≥3 of {2017, 2113, 2020, 2010, 2112} named</div>Best unit yields (latest month 2026-07, min 5 sales &amp; 10 bonds): 2017 (6.95%), 2113 (5.87%), 2020 (5.69%), 2010 (5.60%), 2112 (5.53%).</div>
+  <div class="answer"><div class="who">LANGGRAPH <span class="tag ok">PASS</span> 4.9s</div>"…2017 (6.95%), 2113 (5.87%), 2020 (5.69%), 2010 (5.6%), 2112 (5.53%)…" — matches the golden exactly (latest-month reading).</div>
+  <div class="answer"><div class="who">GENIE <span class="tag risk">FAIL</span> 26.9s</div>Read "currently" as <b>the past 12 months</b> with ≥20 sales &amp; ≥20 bonds: top = 2160, 2018, 2020, 2150, 2127 — only "2020" overlaps the golden top-5. A defensible robustness choice, but a different question than the golden defines.</div>
+  <div class="answer"><div class="who">DATA PILOT <span class="tag ok">PASS</span> 33.0s</div>Used a 6-month window; its list still overlaps the golden top-5 on 3+ postcodes, so it passes the grader.</div>
+  <div class="callout warn"><b>The real decision:</b> what does "currently" mean for a yield ranking? The golden says <em>latest single month</em> (volatile but truly current); Genie answers <em>trailing 12 months</em> (stable but lagging). Pick one — the losing interpretation should either be re-worded into the question ("in the latest month") or adopted as the golden definition.</div>
+  <form class="q-form" data-lavish-question="case3" onsubmit="event.preventDefault();var f=new FormData(event.currentTarget),c=f.get('d'),n=f.get('notes')||'';if(c){window.lavish.queuePrompt('Case 3 (yield) golden answer: '+c+(n?' — notes: '+n:''),{tag:'choice',text:'Case 3: '+c,element:event.currentTarget,data:{case:'yield-best-gross-unit-latest',decision:c,notes:n}});event.currentTarget.classList.add('is-queued')}">
+    <h3>Confirm this golden answer?</h3>
+    <label><input type="radio" name="d" value="confirmed as latest-month; Genie legitimately fails"><span><b>Confirm latest-month</b> definition — Genie's 12-month reading legitimately fails</span></label>
+    <label><input type="radio" name="d" value="reword the question to say 'in the latest month' so the ambiguity is removed"><span><b>Reword the question</b> to "…in the latest month?" — removes the ambiguity, re-run all agents</span></label>
+    <label><input type="radio" name="d" value="change golden to trailing-12-month definition"><span><b>Adopt trailing-12-months</b> as the golden definition instead</span></label>
+    <label><input type="radio" name="d" value="dropped"><span><b>Drop</b> the case</span></label>
+    <textarea name="notes" placeholder="optional notes…"></textarea>
+    <button type="submit">Queue decision</button><span class="queued">queued ✓</span>
+  </form>
+</section>
+
+<section id="findings" class="card">
+  <h2>Platform findings from getting here (all proven live)</h2>
+  <ul>
+    <li><b><code>agents.deploy()</code> works on Free Edition</b> — the Agent Framework path is real: UC-registered ChatAgent → managed endpoint, with a built-in <b>Review App chat UI</b> (the Data Pilot-style chat surface, no Databricks App needed — resolves D2).</li>
+    <li><b>Auto-auth needs declared resources.</b> Without <code>resources=[…]</code> at <code>log_model</code> time the served container has no credentials at all; declaring the LLM endpoint + warehouse isn't enough either — the gold <b>tables</b> must be declared (<code>DatabricksTable</code>) or the endpoint's service principal gets <code>INSUFFICIENT_PERMISSIONS</code> on the schema. Three deploys to learn; v3 is the working chain.</li>
+    <li><b>Free Edition quota: one agent version at a time.</b> agents.deploy accumulates served versions on the endpoint; the third hit "Quota Exceeded: provisioned concurrency for free usage" — delete old deployments before rolling a new version.</li>
+    <li><b><code>databricks-langchain</code> is incompatible with this repo's local tests</b> — it drags in <code>databricks-connect</code>, which shadows local pyspark. The agent uses <code>databricks-sdk</code> directly for both the FMAPI chat and warehouse SQL; langgraph itself is dependency-light.</li>
+    <li><b>ChatAgent endpoints reply with <code>messages</code>, not <code>choices</code></b> — the SDK's chat-completions helper misparses them; call <code>/invocations</code> raw.</li>
+    <li><b>The deployed agent is the fastest contender</b> (~5s vs ~25s for both Genie and Data Pilot) — one LLM round-trip fewer than Genie's managed pipeline, and server-side proximity to the warehouse.</li>
+  </ul>
+</section>
+
+<footer>s06 · agent_bench · dashboard: PropertyIQ Agent Benchmark (bundle-deployed) · results: workspace.propertyiq_ml.agent_benchmark</footer>
+</main>
+</body>
+</html>

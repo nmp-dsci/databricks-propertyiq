@@ -1,0 +1,94 @@
+# Golden QA set for the agent benchmark (s05).
+#
+# Shape mirrors data-qa-agent's evals/cases/*.yaml: each case carries the
+# question, the deterministic golden_sql that defines the reference answer,
+# a grader spec, and an authoring_status. Only `confirmed` cases count
+# toward the benchmark verdict; `draft` cases run but are reported as
+# provisional. Candidate answers below were computed live on the warehouse
+# (2026-08-17, data through month 2026-07) and were confirmed in the s06
+# review — including the case-3 ruling that "currently" means the latest
+# month (an agent answering with a trailing-12-month window fails).
+#
+# Seed of 3 — one per gold table — proves the whole loop before the set
+# grows toward ~20 (ports from data-qa-agent, traps, refusals).
+
+pack: propertyiq_gold
+cases:
+  - case_key: rent-median-2bed-unit-2000-latest
+    question: What's the median weekly rent for a 2-bedroom unit in postcode 2000 right now?
+    dataset: gold_property_rent
+    tier: T1
+    authoring_status: confirmed
+    expectation: >-
+      One value — the latest month's median weekly rent for postcode 2000,
+      property_type unit, bedroom_band '2', with the basis month stated.
+    golden_sql: |
+      SELECT month, median_weekly_rent, n_rented
+      FROM {catalog}.{schema}.gold_property_rent
+      WHERE postcode = '2000'
+        AND property_type = 'unit'
+        AND bedroom_band = '2'
+        AND month = (SELECT max(month) FROM {catalog}.{schema}.gold_property_rent)
+    grader:
+      kind: value
+      expected: 1350.0
+      tolerance_pct: 5.0
+    candidate_answer: "$1,350 per week as at 2026-07 (173 bonds lodged that month)."
+
+  - case_key: sales-top-avg-house-price-12m
+    question: Which postcodes had the highest average house sale price over the last 12 months?
+    dataset: gold_property_sales
+    tier: T3
+    authoring_status: confirmed
+    expectation: >-
+      A ranked list of postcodes by average house sale price over the trailing
+      12 months. Trap: the average must be re-aggregated as
+      sum(total_sale_value)/sum(n_sold) — not an average of monthly averages —
+      and a volume floor must exclude thin postcodes.
+    golden_sql: |
+      SELECT postcode,
+             ROUND(SUM(total_sale_value) / SUM(n_sold), 0) AS avg_house_price,
+             SUM(n_sold) AS n_sold
+      FROM {catalog}.{schema}.gold_property_sales
+      WHERE property_type = 'house'
+        AND month > add_months(
+              (SELECT max(month) FROM {catalog}.{schema}.gold_property_sales), -12)
+      GROUP BY postcode
+      HAVING SUM(n_sold) >= 30
+      ORDER BY avg_house_price DESC
+      LIMIT 10
+    grader:
+      kind: topk
+      expected_keys: ["2063", "2030", "2095", "2088", "2026"]
+      min_hits: 3
+    candidate_answer: >-
+      Top postcodes by average house sale price (12 months to 2026-07, min 30
+      sales): 2063 ($5.10M), 2030 ($5.07M), 2095 ($4.76M), 2088 ($4.76M),
+      2026 ($4.73M).
+
+  - case_key: yield-best-gross-unit-latest
+    question: Which postcodes currently give the best gross rental yield for units?
+    dataset: gold_property_yield
+    tier: T2
+    authoring_status: confirmed
+    expectation: >-
+      A latest-month ranking of postcodes by gross_yield_pct for units, with a
+      volume floor on both sales and rentals so one-off sales don't dominate.
+    golden_sql: |
+      SELECT postcode,
+             ROUND(gross_yield_pct, 2) AS gross_yield_pct,
+             n_sold, n_rented
+      FROM {catalog}.{schema}.gold_property_yield
+      WHERE property_type = 'unit'
+        AND month = (SELECT max(month) FROM {catalog}.{schema}.gold_property_yield)
+        AND n_sold >= 5
+        AND n_rented >= 10
+      ORDER BY gross_yield_pct DESC
+      LIMIT 10
+    grader:
+      kind: topk
+      expected_keys: ["2017", "2113", "2020", "2010", "2112"]
+      min_hits: 3
+    candidate_answer: >-
+      Best gross rental yield for units (2026-07, min 5 sales and 10 bonds):
+      2017 (6.95%), 2113 (5.87%), 2020 (5.69%), 2010 (5.60%), 2112 (5.53%).
