@@ -1,3 +1,22 @@
+# PARKED — Free Edition allows exactly one custom model-serving endpoint, and
+# that slot currently holds rag_transcript_agent (deployed by
+# scripts/register_rag_agent.py via agents.deploy).
+#
+# Deploying this resource alongside it fails the whole bundle with
+# "You've hit the limit for endpoints for free usage", which also blocks every
+# unrelated resource in the same deploy — so the block below is commented out
+# rather than left to fail.
+#
+# To bring the rent estimator back:
+#   1. databricks serving-endpoints delete agents_workspace-rag-rag_transcript_agent
+#   2. uncomment the block below
+#   3. make deploy
+# Nothing else is lost in the meantime: the model itself is still registered at
+# {catalog}.{ml_schema}.rent_estimator with its champion alias, batch scoring
+# (ml_score) still runs, and only the real-time endpoint and the ai_query
+# example in src/sql/03_ml_ai_query.sql depend on this.
+#
+# ---------------------------------------------------------------------------
 # The real-time half of R5: the champion rent estimator behind a serverless
 # CPU serving endpoint (the only serving flavour on Free Edition).
 #
@@ -10,14 +29,15 @@
 # scale_to_zero: a weekly-data demo endpoint should cost nothing between
 # queries; first request after idle pays a cold start, which is the trade-off
 # to say out loud.
-resources:
-  model_serving_endpoints:
-    rent_estimator_endpoint:
-      name: propertyiq-rent-estimator
-      config:
-        served_entities:
-          - name: rent-estimator
-            entity_name: ${var.catalog}.${var.ml_schema}.rent_estimator
-            entity_version: "1"
-            workload_size: Small
-            scale_to_zero_enabled: true
+#
+# resources:
+#   model_serving_endpoints:
+#     rent_estimator_endpoint:
+#       name: propertyiq-rent-estimator
+#       config:
+#         served_entities:
+#           - name: rent-estimator
+#             entity_name: ${var.catalog}.${var.ml_schema}.rent_estimator
+#             entity_version: "1"
+#             workload_size: Small
+#             scale_to_zero_enabled: true

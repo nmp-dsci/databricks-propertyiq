@@ -1,0 +1,394 @@
+{
+  "datasets": [
+    {
+      "name": "ds_summary",
+      "displayName": "Retrieval quality by contender (latest run)",
+      "queryLines": [
+        "SELECT contender, ",
+        "       avg(video_recall) AS recall_at_10, ",
+        "       avg(video_mrr) AS mrr, ",
+        "       avg(video_ndcg) AS ndcg_at_10, ",
+        "       avg(latency_s) AS latency_s ",
+        "FROM workspace.rag.rag_eval ",
+        "WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval) ",
+        "GROUP BY contender"
+      ]
+    },
+    {
+      "name": "ds_metric_long",
+      "displayName": "Metrics in long form for the grouped bar",
+      "queryLines": [
+        "WITH latest AS ( ",
+        "  SELECT * FROM workspace.rag.rag_eval WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval) ",
+        ") ",
+        "SELECT contender, 'recall@10' AS metric, avg(video_recall) AS score FROM latest GROUP BY contender ",
+        "UNION ALL ",
+        "SELECT contender, 'MRR', avg(video_mrr) FROM latest GROUP BY contender ",
+        "UNION ALL ",
+        "SELECT contender, 'NDCG@10', avg(video_ndcg) FROM latest GROUP BY contender"
+      ]
+    },
+    {
+      "name": "ds_domain",
+      "displayName": "Recall by question domain",
+      "queryLines": [
+        "SELECT domain, contender, avg(video_recall) AS recall_at_10 ",
+        "FROM workspace.rag.rag_eval ",
+        "WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval) ",
+        "GROUP BY domain, contender"
+      ]
+    },
+    {
+      "name": "ds_detail",
+      "displayName": "Per-question detail",
+      "queryLines": [
+        "SELECT case_id, domain, question_type, contender, ",
+        "       video_recall, video_mrr, video_ndcg, latency_s, ",
+        "       chunk_anchors_resolved, chunk_anchors_unresolved, retrieved_videos ",
+        "FROM workspace.rag.rag_eval ",
+        "WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval) ",
+        "ORDER BY case_id, contender"
+      ]
+    },
+    {
+      "name": "ds_anchors",
+      "displayName": "Golden anchor health",
+      "queryLines": [
+        "SELECT sum(chunk_anchors_resolved) / 3 AS resolved, ",
+        "       sum(chunk_anchors_unresolved) / 3 AS unresolved ",
+        "FROM workspace.rag.rag_eval ",
+        "WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval)"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "page_verdict",
+      "displayName": "Verdict",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Chroma vs Vector Search — retrieval verdict"
+              ]
+            }
+          },
+          "position": { "x": 0, "y": 0, "width": 6, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "subtitle",
+            "multilineTextboxSpec": {
+              "lines": [
+                "transcript-lab's own 20-question golden set, run against three retrievers so each comparison moves **one** variable. `chroma` is the local baseline (MiniLM vectors, HNSW on disk). `vs_minilm` puts **the same vectors** in Vector Search, so any gap is the **engine**. `vs_gte` swaps in Databricks-managed `gte-large-en`, so the gap from `vs_minilm` is the **embedding model**. Scored by `src/lib/ir_metrics.py`; video ids carry the verdict because chunk ids churn on every local re-index."
+              ]
+            }
+          },
+          "position": { "x": 0, "y": 1, "width": 6, "height": 2 }
+        },
+        {
+          "widget": {
+            "name": "score-chroma",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_summary",
+                  "fields": [{ "name": "ndcg_at_10", "expression": "`ndcg_at_10`" }],
+                  "filters": [{ "expression": "`contender` = 'chroma'" }],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "ndcg_at_10",
+                  "displayName": "NDCG@10",
+                  "format": { "type": "number", "decimalPlaces": { "type": "exact", "places": 3 } }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "chroma (baseline)",
+                "showDescription": true,
+                "description": "transcript-lab's local index — MiniLM + HNSW"
+              }
+            }
+          },
+          "position": { "x": 0, "y": 3, "width": 2, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "score-vs-minilm",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_summary",
+                  "fields": [{ "name": "ndcg_at_10", "expression": "`ndcg_at_10`" }],
+                  "filters": [{ "expression": "`contender` = 'vs_minilm'" }],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "ndcg_at_10",
+                  "displayName": "NDCG@10",
+                  "format": { "type": "number", "decimalPlaces": { "type": "exact", "places": 3 } }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "vs_minilm (parity control)",
+                "showDescription": true,
+                "description": "Same vectors, Databricks engine — should match the baseline"
+              }
+            }
+          },
+          "position": { "x": 2, "y": 3, "width": 2, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "score-vs-gte",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_summary",
+                  "fields": [{ "name": "ndcg_at_10", "expression": "`ndcg_at_10`" }],
+                  "filters": [{ "expression": "`contender` = 'vs_gte'" }],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "ndcg_at_10",
+                  "displayName": "NDCG@10",
+                  "format": { "type": "number", "decimalPlaces": { "type": "exact", "places": 3 } }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "vs_gte (the agent's index)",
+                "showDescription": true,
+                "description": "Databricks-managed gte-large-en, 1024-dim"
+              }
+            }
+          },
+          "position": { "x": 4, "y": 3, "width": 2, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "metric-bars",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_metric_long",
+                  "fields": [
+                    { "name": "metric", "expression": "`metric`" },
+                    { "name": "contender", "expression": "`contender`" },
+                    { "name": "score", "expression": "`score`" }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": { "fieldName": "metric", "scale": { "type": "categorical" }, "displayName": "Metric" },
+                "y": { "fieldName": "score", "scale": { "type": "quantitative" }, "displayName": "Score" },
+                "color": {
+                  "fieldName": "contender",
+                  "scale": { "type": "categorical" },
+                  "displayName": "Contender"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "All three metrics, side by side",
+                "showDescription": true,
+                "description": "chroma and vs_minilm matching is the control working; vs_gte diverging is the embedding model"
+              }
+            }
+          },
+          "position": { "x": 0, "y": 6, "width": 4, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "latency",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_summary",
+                  "fields": [
+                    { "name": "contender", "expression": "`contender`" },
+                    { "name": "latency_s", "expression": "`latency_s`" }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": { "fieldName": "latency_s", "scale": { "type": "quantitative" }, "displayName": "Seconds" },
+                "y": { "fieldName": "contender", "scale": { "type": "categorical" }, "displayName": "Contender" }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Query latency",
+                "showDescription": true,
+                "description": "Local disk beats a network hop; gte also pays an embedding call"
+              }
+            }
+          },
+          "position": { "x": 4, "y": 6, "width": 2, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "domain-bars",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_domain",
+                  "fields": [
+                    { "name": "domain", "expression": "`domain`" },
+                    { "name": "contender", "expression": "`contender`" },
+                    { "name": "recall_at_10", "expression": "`recall_at_10`" }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": { "fieldName": "domain", "scale": { "type": "categorical" }, "displayName": "Domain" },
+                "y": { "fieldName": "recall_at_10", "scale": { "type": "quantitative" }, "displayName": "recall@10" },
+                "color": {
+                  "fieldName": "contender",
+                  "scale": { "type": "categorical" },
+                  "displayName": "Contender"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Recall by question domain",
+                "showDescription": true,
+                "description": "Where each retriever earns or loses its average"
+              }
+            }
+          },
+          "position": { "x": 0, "y": 12, "width": 6, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "detail",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_detail",
+                  "fields": [
+                    { "name": "case_id", "expression": "`case_id`" },
+                    { "name": "domain", "expression": "`domain`" },
+                    { "name": "question_type", "expression": "`question_type`" },
+                    { "name": "contender", "expression": "`contender`" },
+                    { "name": "video_recall", "expression": "`video_recall`" },
+                    { "name": "video_mrr", "expression": "`video_mrr`" },
+                    { "name": "video_ndcg", "expression": "`video_ndcg`" },
+                    { "name": "latency_s", "expression": "`latency_s`" },
+                    { "name": "retrieved_videos", "expression": "`retrieved_videos`" }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  { "fieldName": "case_id", "displayName": "Case", "booleanValues": ["false", "true"], "type": "string" },
+                  { "fieldName": "domain", "displayName": "Domain", "booleanValues": ["false", "true"], "type": "string" },
+                  { "fieldName": "question_type", "displayName": "Type", "booleanValues": ["false", "true"], "type": "string" },
+                  { "fieldName": "contender", "displayName": "Contender", "booleanValues": ["false", "true"], "type": "string" },
+                  {
+                    "fieldName": "video_recall",
+                    "displayName": "recall@10",
+                    "type": "float",
+                    "numberFormat": "0.00",
+                    "cellFormat": {
+                      "default": { "foregroundColor": null },
+                      "rules": [
+                        { "condition": { "operator": "EQUAL", "operand": { "type": "data-value", "value": "0" } }, "foregroundColor": "#D55E00" },
+                        { "condition": { "operator": "EQUAL", "operand": { "type": "data-value", "value": "1" } }, "foregroundColor": "#009E73" }
+                      ]
+                    }
+                  },
+                  { "fieldName": "video_mrr", "displayName": "MRR", "type": "float", "numberFormat": "0.00" },
+                  { "fieldName": "video_ndcg", "displayName": "NDCG@10", "type": "float", "numberFormat": "0.00" },
+                  { "fieldName": "latency_s", "displayName": "Latency (s)", "type": "float", "numberFormat": "0.00" },
+                  { "fieldName": "retrieved_videos", "displayName": "Retrieved video ids", "booleanValues": ["false", "true"], "type": "string" }
+                ]
+              },
+              "invisibleColumns": [],
+              "allowHTMLByDefault": false,
+              "itemsPerPage": 25,
+              "frame": {
+                "showTitle": true,
+                "title": "Every question, every contender",
+                "showDescription": true,
+                "description": "Green recall = every expected video found; red = none"
+              }
+            }
+          },
+          "position": { "x": 0, "y": 18, "width": 6, "height": 8 }
+        },
+        {
+          "widget": {
+            "name": "anchors-note",
+            "multilineTextboxSpec": {
+              "lines": [
+                "**On the golden set's chunk anchors.** It was verified against a 23-video / 488-chunk corpus; the corpus is now 107 videos / 2,966 chunks, and transcript-lab recreates chunk ids on every re-index. So `expected_video_ids` decides the verdict here, while `expected_chunk_ids` are re-anchored by content hash and reported per case (`chunk_anchors_resolved` / `_unresolved`) rather than being scored as silent misses. Re-confirming the unresolved anchors is the next piece of work."
+              ]
+            }
+          },
+          "position": { "x": 0, "y": 26, "width": 6, "height": 2 }
+        }
+      ]
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "canvasBackgroundColor": { "light": "#FCFCFC", "dark": "#1F272D" },
+      "widgetBackgroundColor": { "light": "#FFFFFF", "dark": "#11171C" },
+      "widgetBorderColor": { "light": "#FFFFFF", "dark": "#11171C" },
+      "fontColor": { "light": "#11171C", "dark": "#E8ECF0" },
+      "selectionColor": { "light": "#2272B4", "dark": "#8ACAFF" },
+      "visualizationColors": ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#D55E00", "#56B4E9", "#F0E442"],
+      "widgetHeaderAlignment": "LEFT"
+    }
+  }
+}

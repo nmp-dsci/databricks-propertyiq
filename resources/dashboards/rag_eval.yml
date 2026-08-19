@@ -1,0 +1,13 @@
+resources:
+  dashboards:
+    rag_eval:
+      display_name: PropertyIQ RAG Retrieval Verdict
+      file_path: ../../dashboards/rag_eval.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      # Datasets carry fully-qualified table names, matching the other two
+      # dashboards — bundle dashboard resources take no `parameters`, so the
+      # catalog/schema cannot be bound here.
+      # Same round-trip contract as the other two dashboards: deploy pushes this
+      # JSON, UI edits come back via `make pull-dashboard`, and
+      # embed_credentials=false keeps a UI edit from being clobbered silently.
+      embed_credentials: false
