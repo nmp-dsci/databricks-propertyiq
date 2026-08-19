@@ -20,25 +20,33 @@ resources/
   jobs/ml_train.yml            feature build → train → promotion gate (on demand + drift-triggered)
   jobs/ml_score.yml            feature build → batch score → drift → conditional retrain
   jobs/ml_forecast.yml         AI_FORECAST vs trained model vs seasonal-naive comparison
+  jobs/rag_ingest.yml          bronze land → silver merge → checks → index sync, file-arrival triggered
   pipelines/medallion_pipeline.yml  Declarative Pipeline variant of the medallion, side by side
-  serving/rent_estimator_endpoint.yml  scale-to-zero serving endpoint for the champion model
+  serving/rent_estimator_endpoint.yml  parked — Free Edition allows one custom endpoint, rag_transcript_agent holds it
   dashboards/property_overview.yml
   dashboards/agent_benchmark.yml       verdict dashboard for the QA-agent benchmark
+  dashboards/rag_eval.yml              verdict dashboard for the RAG retrieval benchmark
 genie/propertyiq.genie.json    Genie space definition (checked in for reproducibility, not a bundle resource)
 src/
   notebooks/*.py               Databricks source-format notebooks (render as notebooks up there)
   notebooks/ml/*.py            feature build, train/register/gate, batch score, drift, forecast compare
+  notebooks/rag/*.py           bronze land, silver merge, checks, index sync (embed + upsert + retire)
   lib/transforms.py            the medallion logic — pure, unit-tested, no I/O
   lib/ml_features.py, ml_model.py, ml_forecast.py, ml_monitoring.py   the ML logic — same pattern
   lib/qa_agent.py               the LangGraph QA agent — route → plan_sql → execute → reflect → answer
   lib/qa_agent_model.py         MLflow models-from-code entrypoint (the agent as a ChatAgent)
   lib/agent_eval.py             deterministic graders for the QA-agent benchmark
+  lib/rag_export.py             pure transforms for the transcript-lab export (hash, land, merge)
+  lib/rag_agent.py              rag_transcript_agent — single/multi/agentic_rag modes, LLM + SQL injected
+  lib/rag_agent_model.py        MLflow models-from-code entrypoint (the RAG agent as a ChatAgent)
+  lib/ir_metrics.py             retrieval-quality graders for the RAG benchmark
   pipelines/propertyiq/        the Declarative Pipeline variant's transformations (own README)
   sql/*.sql                    warehouse queries, runnable from the terminal
 dashboards/*.lvdash.json       AI/BI dashboards, deployed as code
 evals/golden_qa.yaml           confirmed golden Q&A set for the QA-agent benchmark
 tests/                         local Spark tests, no workspace required
-scripts/                       setup, auth, SQL runner, gold/dbt parity check, agent register + benchmark
+scripts/                       setup, auth, SQL runner, parity check, agent register + benchmark,
+                                RAG export (+ dry-run), RAG agent register, RAG eval, chroma subprocess helpers
 ```
 
 ### The one trick that makes this work
@@ -404,6 +412,8 @@ the same content-hashed, append-only contract `propertyiq_getdata` uses for the
 property feed. Unchanged content is never uploaded, so the command is safe to
 run whenever and a no-op run costs nothing. That is also why it is manual
 rather than scheduled: it is idempotent, and most hours there is nothing new.
+`make rag-export-dry` runs the same hash-and-diff without uploading, to check
+what a real run would land.
 
 Reading the corpus needs `chromadb` (the vectors live in Chroma's HNSW segment
 files, not its SQLite), so `scripts/_chroma_dump.py` runs in *transcript-lab's
