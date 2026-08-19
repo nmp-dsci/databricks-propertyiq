@@ -389,6 +389,70 @@ latency per contender, read straight from `agent_benchmark`.
 
 ---
 
+## RAG: transcript·lab's corpus, ported onto Vector Search
+
+The sibling `transcript-rag-agent` project (transcript·lab) is an
+evaluation-first RAG workbench over ~100 YouTube transcripts — local Chroma,
+MiniLM embeddings, a 20-question golden set with real IR metrics. It had no
+Databricks code at all. This branch moves its corpus and its answer paths onto
+the lakehouse and then *measures whether that was an improvement*.
+
+**The ETL is a push, because Free Edition cannot pull.** `make rag-export`
+snapshots every store in that project and lands one Parquet per entity on
+`/Volumes/workspace/rag/landing/<entity>/`, named `<entity>_<sha8>.parquet` —
+the same content-hashed, append-only contract `propertyiq_getdata` uses for the
+property feed. Unchanged content is never uploaded, so the command is safe to
+run whenever and a no-op run costs nothing. That is also why it is manual
+rather than scheduled: it is idempotent, and most hours there is nothing new.
+
+Reading the corpus needs `chromadb` (the vectors live in Chroma's HNSW segment
+files, not its SQLite), so `scripts/_chroma_dump.py` runs in *transcript-lab's
+own virtualenv* as a subprocess. Pulling chromadb in here would drag
+onnxruntime alongside pyspark for no benefit.
+
+| Landed | Rows | Table |
+|---|---|---|
+| chunks (with their MiniLM vectors) | 2,966 | `silver_chunks` |
+| transcripts / segments / summaries | 107 / 80,836 / 105 | `silver_transcripts`, `silver_segments`, `silver_summaries` |
+| golden questions | 20 | `silver_golden_qa` |
+| graph entities / relations / claims | 14,809 / 7,508 / 9,295 | `silver_graph_*` |
+
+`rag_ingest` (file-arrival triggered) runs Auto Loader → bronze → a silver
+reconciliation. Each file is a **full snapshot**, so silver `MERGE`s the newest
+one on `(video_id, chunk_index)` and marks anything absent as
+`is_current = false` — a soft delete, because transcript·lab recreates chunk
+ids on every re-index, so a "missing" row is usually a re-chunk rather than a
+retraction. That is also why the merge key is the position plus a `text_sha`
+and never the chunk id.
+
+**`rag_transcript_agent`** (`make register-rag-agent`) serves three of
+transcript·lab's answer paths from one deployment, chosen per call with
+`custom_inputs={"mode": ...}`: `single` (one retrieval), `multi` (decompose →
+retrieve per sub-question → synthesize) and `agentic` (a ReAct loop, the
+default). `custom_outputs` returns the retrieved chunk keys and the decision
+log, which is what lets the eval score *retrieval* rather than only prose.
+Answers cite video title and timestamp. `agents.deploy` gives it a Review App.
+
+**The verdict** (`make rag-eval`, dashboard `rag_eval.lvdash.json`) runs the
+golden set against three retrievers so each comparison moves one variable:
+
+| Contender | recall@10 | MRR | NDCG@10 | What it isolates |
+|---|---|---|---|---|
+| `chroma` | 0.633 | 0.529 | 0.522 | the local baseline |
+| `vs_minilm` | 0.633 | 0.529 | 0.522 | **the engine** — same vectors, Databricks |
+| `vs_gte` | 0.583 | 0.625 | 0.578 | **the model** — managed `gte-large-en` |
+
+`chroma` and `vs_minilm` matching *exactly* is the control working: Vector
+Search reproduces the local index when given the same vectors, so the port is
+faithful. Swapping in gte then trades a little recall for noticeably better
+ranking — it finds slightly fewer of the expected videos but puts the right one
+first more often. Scoring is on video ids because they are stable; the golden
+set's chunk anchors were verified against a 23-video corpus (it is 107 now) and
+are re-anchored by content hash, with whatever fails to resolve reported rather
+than scored as a silent miss.
+
+---
+
 ## Free Edition constraints, and what each one forced
 
 | Constraint | Consequence here |
@@ -402,6 +466,9 @@ latency per contender, read straight from `agent_benchmark`.
 | `mlflow.pyfunc.spark_udf` broken on serverless | Batch scoring (`03_batch_score.py`) predicts driver-side with pandas instead of a distributed UDF — also the right scale for ~2.5k rows/month |
 | Serving config pins a model version, not a UC alias | The training notebook rolls the endpoint's pinned version forward in the same run that flips `@champion` |
 | `langgraph` not preinstalled on serverless job compute | Agent registration (`make register-agent`) and the QA-agent benchmark (`make benchmark`) run locally, not as workspace jobs |
+| Vector Search **delta-sync** indexes never provision | Their backing pipeline sits on "pending setup of pipeline resources" indefinitely, even though the endpoint reports ONLINE and **direct-access indexes work fine**. `04_index_sync.py` therefore does by hand what delta-sync would do: embed changed chunks with `ai_query`, upsert them, keyed on `text_sha` so nothing is re-embedded needlessly |
+| Vector Search queries reject control-plane calls | The index lives behind its own data-plane host, so a raw `api_client.do` query returns `PermissionDenied` — use the typed `w.vector_search_indexes.query_index` instead (upserts, oddly, work either way) |
+| **One** custom model-serving endpoint | The rent estimator's endpoint is parked (`resources/serving/rent_estimator_endpoint.yml`) so `rag_transcript_agent` can hold the slot; leaving both declared failed every bundle deploy. Swapping back is a documented two-step |
 
 Sources: [Free Edition limitations](https://docs.databricks.com/aws/en/getting-started/free-edition-limitations)
 
