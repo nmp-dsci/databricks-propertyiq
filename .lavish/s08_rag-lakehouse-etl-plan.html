@@ -150,6 +150,10 @@ footer{margin-top:70px;color:var(--faint);font-size:13px;font-family:var(--mono)
       ChatAgent + <code>agents.deploy</code>, benchmark graders, verdict dashboards.</li>
     <li><b>Desired behavior:</b> run <code>make rag-export</code> (or let the schedule do it) → new/changed transcript data lands →
       the workspace ingests, syncs the index, and the agent answers from fresh data. Re-runnable any day with no manual steps.</li>
+    <li><b>Key acceptance test:</b> ask <code>rag_transcript_agent</code> (UC model <code>workspace.rag.rag_transcript_agent</code>,
+      served via <code>agents.deploy</code>) any question in its Review App chat and it answers through the <b>agentic RAG</b> path —
+      retriever-tool hops visible in the decision log, answer cited to video + timestamp. That single interaction is the
+      definition of done for phases 1–4.</li>
     <li><b>Where the code lives:</b> branch <code>rag</code> of <code>databricks-propertyiq</code>. The exporter reads
       <code>../transcript-rag-agent/.yt-agent/</code> read-only (path via <code>RAG_SOURCE_DIR</code> env; transcript-rag-agent
       is not modified). New UC schema: <code>workspace.rag</code>.</li>
@@ -179,7 +183,7 @@ flowchart TB
     JOB["rag_ingest job<br/>file-arrival trigger<br/>Auto Loader → bronze"]
     SIL["silver Delta tables<br/>MERGE on natural keys<br/>CDF enabled on chunks"]
     VSI["Vector Search<br/>delta-sync index<br/>endpoint rag-search"]
-    AGT["RAG ChatAgent<br/>retriever tool → answer<br/>agents.deploy"]
+    AGT["rag_transcript_agent<br/>modes: single · multi · agentic<br/>agents.deploy + Review App"]
     DASH["retrieval-eval<br/>verdict dashboard"]
     VOL --> JOB --> SIL --> VSI --> AGT
     SIL --> DASH
@@ -238,11 +242,11 @@ flowchart TB
   </ol>
   <h3 style="margin-top:16px">Periodicity — two layers</h3>
   <ul>
-    <li><b>Laptop → volume:</b> a <code>launchd</code> plist (macOS-native cron; survives sleep better than cron) running
-      <code>make rag-export</code> nightly at 21:00, plus the manual target for on-demand pushes. Free Edition has no inbound
-      path to the laptop, so local-push is the only option — the schedule makes it feel like a pipeline anyway.</li>
-    <li><b>Volume → tables → index:</b> fully event-driven in the workspace (file-arrival → job → index sync). No cron needed
-      on the Databricks side; nothing runs (or costs quota) when no data lands.</li>
+    <li><b>Laptop → volume:</b> <span class="tag ok">decided (D3)</span> manual <code>make rag-export</code>, run whenever the
+      local corpus changes. No launchd/cron — the target is idempotent and sha-deduped, so running it is always safe and a
+      no-op when nothing changed. (A schedule can be added later without touching any code.)</li>
+    <li><b>Volume → tables → index:</b> fully event-driven in the workspace (file-arrival → job → index sync). Nothing runs
+      (or costs quota) when no data lands — so "periodic" is exactly as often as you run the export.</li>
   </ul>
 </section>
 
@@ -270,13 +274,24 @@ flowchart TB
   chunk-level hits are re-anchored by matching golden chunk text-shas against today's <code>silver_chunks</code>. Questions whose
   anchors don't resolve get flagged for a confirm pass (the s06 pattern) before counting.</p>
   <ul>
-    <li><b>Contenders:</b> local Chroma (MiniLM, the baseline) vs <code>rag_chunks_gte</code> vs <code>rag_chunks_minilm</code> —
-      retrieval-level first (recall@10/MRR/NDCG per domain), then end-to-end: the RAG ChatAgent answers all 20, graded by the
-      existing deterministic-grader pattern.</li>
-    <li><b>Agent:</b> <code>rag_agent.py</code> as a ChatAgent — retriever tool (VS query, top-8, score floor) + answer node with
-      citations (video title + timestamp), registered with declared resources
-      (<code>DatabricksVectorSearchIndex</code> + serving endpoint + tables — the v3 auth lesson applied on day one), deployed
-      via <code>agents.deploy</code>.</li>
+    <li><b>Contenders:</b> retrieval-level first — local Chroma (MiniLM, the baseline) vs <code>rag_chunks_gte</code> vs
+      <code>rag_chunks_minilm</code> (recall@10/MRR/NDCG per domain). Then end-to-end: the deployed agent answers all 20 in each
+      mode (<code>single</code> / <code>multi</code> / <code>agentic</code>), graded by the deterministic-grader pattern — a
+      modes × index matrix, echoing transcript·lab's own eval-matrix design.</li>
+    <li><b>Agent — <code>rag_transcript_agent</code>, one deployment, three answer modes</b>, porting transcript·lab's answer
+      paths onto Vector Search (registered as <code>workspace.rag.rag_transcript_agent</code>):
+      <ul style="margin-top:6px">
+        <li><code>single</code> — one retrieval (VS query, top-8, score floor) → cited answer. Port of the single-hop
+          <code>rag_transcript_agent</code> path.</li>
+        <li><code>multi</code> — recursive multi-hop: decompose → retrieve per sub-question → synthesize, bounded depth 2.
+          Port of the recursive path.</li>
+        <li><code>agentic</code> <span class="tag ok">default</span> — LangGraph ReAct loop where the LLM calls the retriever
+          tool as many times as it decides (capped), then answers. Port of <code>rag_agent.py</code>'s agentic path.</li>
+      </ul>
+      All three live in one ChatAgent; the caller picks via <code>custom_inputs={"mode": "..."}</code> (the Review App and
+      benchmark exercise all three; <code>custom_outputs</code> returns retrieved chunk ids + decision log per hop, feeding the
+      IR metrics directly). Registered with declared resources (<code>DatabricksVectorSearchIndex</code> + LLM endpoint +
+      tables — the v3 auth lesson applied on day one), deployed once via <code>agents.deploy</code>.</li>
     <li><b>Verdict dashboard:</b> <code>rag_eval</code> results table → bundle-managed dashboard: metric bars per contender,
       per-domain breakdown, latency, and the pass/fail detail grid.</li>
   </ul>
@@ -295,7 +310,7 @@ flowchart TB
     </div></div>
     <div class="phase"><div class="num">2</div><div>
       <h3>Exporter ETL</h3>
-      <div class="meta">scripts/rag_export.py · sha-dedup parquet · make rag-export · launchd schedule</div>
+      <div class="meta">scripts/rag_export.py · sha-dedup parquet · make rag-export (manual, D3)</div>
       <p style="font-size:14px;margin:6px 0 0">SQLite + JSON readers, snapshot diffing, volume upload, unit tests on the
       readers/shas (fixtures from real rows). Exit: two consecutive runs — first lands ~10 files, second lands zero.</p>
     </div></div>
@@ -307,11 +322,13 @@ flowchart TB
       and a re-export changes nothing.</p>
     </div></div>
     <div class="phase"><div class="num">4</div><div>
-      <h3>Index + RAG agent</h3>
-      <div class="meta">rag_chunks_gte (+minilm) · retriever ChatAgent · agents.deploy</div>
-      <p style="font-size:14px;margin:6px 0 0">Production indexes with post-ingest sync task; RAG ChatAgent with citation
-      answers; register with declared VS resources; deploy (delete old versions first — the quota lesson). Exit: Review App
-      answers a golden question with correct video citations.</p>
+      <h3>Index + rag_transcript_agent (3 modes)</h3>
+      <div class="meta">rag_chunks_gte (+minilm) · workspace.rag.rag_transcript_agent · agents.deploy</div>
+      <p style="font-size:14px;margin:6px 0 0">Production indexes with post-ingest sync task; one ChatAgent carrying the
+      three ported answer modes (mode via <code>custom_inputs</code>, chunk ids + decision log in <code>custom_outputs</code>);
+      register with declared VS resources; deploy (delete old versions first — the quota lesson). <b>Exit = the key acceptance
+      test:</b> ask <code>rag_transcript_agent</code> a question in the Review App and it answers via agentic RAG with correct
+      video citations (then verify single/multi too).</p>
     </div></div>
     <div class="phase"><div class="num">5</div><div>
       <h3>Eval + verdict</h3>
@@ -331,13 +348,20 @@ flowchart TB
     <tr><td>FMAPI embedding rate limits make the first gte sync of 2,966 chunks slow/throttled</td><td><span class="tag warn">medium</span></td><td>One-time cost; TRIGGERED sync retries; subsequent syncs are incremental via CDF.</td></tr>
     <tr><td>Chunk-id churn corrupts merges when a video is re-indexed locally</td><td><span class="tag ok">designed for</span></td><td>Natural key + text-sha + <code>is_current</code> soft-delete; DQ task asserts no duplicate keys.</td></tr>
     <tr><td>Golden chunk anchors don't resolve after 6× corpus growth</td><td><span class="tag risk">expected</span></td><td>Video-level metrics always valid; chunk-level re-anchored by text-sha; unresolved → s09 confirm pass.</td></tr>
-    <tr><td>Laptop asleep at 21:00 → no nightly push</td><td><span class="tag ok">acceptable</span></td><td>launchd runs missed jobs on wake; workspace side is event-driven so late data just flows.</td></tr>
+    <tr><td>Manual export gets forgotten → workspace data goes stale</td><td><span class="tag ok">accepted (D3)</span></td><td>Deliberate choice: export is manual. <code>make rag-export</code> prints staleness (last landed sha vs current); re-runs are free no-ops.</td></tr>
     <tr><td>VS endpoint idles cost quota</td><td><span class="tag warn">watch</span></td><td>Free Edition compute is quota'd not billed; keep exactly one endpoint, document teardown in Makefile.</td></tr>
   </table></div>
 </section>
 
 <section id="decide" class="card">
-  <h2>Three decisions before build</h2>
+  <h2>Decisions — locked 2026-08-19</h2>
+  <div class="table-wrap" style="margin-top:12px"><table>
+    <tr><th>#</th><th>Decision</th><th>Chosen</th></tr>
+    <tr><td>D1</td><td>Embedding strategy</td><td><span class="tag ok">both</span> — <code>rag_chunks_gte</code> (managed, primary) + <code>rag_chunks_minilm</code> (self-managed parity control)</td></tr>
+    <tr><td>D2</td><td>Export scope</td><td><span class="tag ok">full map</span> — all 9 table groups as drawn</td></tr>
+    <tr><td>D3</td><td>Export trigger</td><td><span class="tag ok">manual only</span> — <code>make rag-export</code> on demand, no schedule (launchd deliberately dropped)</td></tr>
+  </table></div>
+  <details style="margin-top:14px"><summary style="cursor:pointer;font-size:13.5px;color:var(--muted)">Original decision forms (resolved — kept for the record)</summary>
 
   <form class="q-form" data-lavish-question="d1-embeddings"
     onsubmit="event.preventDefault();var f=event.currentTarget;var c=new FormData(f).get('d1');if(!c)return;window.lavish.queuePrompt('D1 embeddings: '+c,{tag:'choice',text:'D1: '+c,element:f,data:{question:'d1-embeddings',answer:c}});f.classList.add('is-queued');">
@@ -376,9 +400,9 @@ flowchart TB
     <button type="submit">Queue answer</button><span class="queued">✓ queued</span>
   </form>
 
-  <p style="font-size:13.5px;color:var(--muted);margin-top:14px">Queue answers (or annotate anything above), press
-  <b>Send to Agent</b>, and I'll start building phase 1 on branch <code>rag</code>. Defaults if you just say "go with
-  recommendations": both indexes · full map · launchd nightly.</p>
+  </details>
+  <p style="font-size:13.5px;color:var(--muted);margin-top:14px">Decisions locked — build underway on branch <code>rag</code>,
+  starting with phase 1 (schema + volume + <code>rag-search</code> endpoint + index probe).</p>
 </section>
 
 <footer>s08 · plan for branch rag · sources: transcript-rag-agent data survey + live workspace probes (2026-08-19)</footer>
