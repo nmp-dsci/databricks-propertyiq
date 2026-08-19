@@ -15,8 +15,8 @@
 # MAGIC on Free Edition its backing pipeline never leaves "pending setup of
 # MAGIC pipeline resources" (probed for an hour; the endpoint itself is ONLINE and
 # MAGIC direct-access indexes on it work fine). So this notebook does by hand what
-# MAGIC delta-sync would have done: embed what changed, upsert it, and leave
-# MAGIC everything else alone.
+# MAGIC delta-sync would have done: embed what changed, upsert it, and retire keys
+# MAGIC silver no longer holds as current.
 # MAGIC
 # MAGIC Embedding is **incremental on `text_sha`**. Re-embedding 2,966 chunks on
 # MAGIC every ingest would be slow and pointless when a typical export changes a

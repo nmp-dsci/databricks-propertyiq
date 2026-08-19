@@ -425,6 +425,12 @@ ids on every re-index, so a "missing" row is usually a re-chunk rather than a
 retraction. That is also why the merge key is the position plus a `text_sha`
 and never the chunk id.
 
+A soft delete in silver still has to be enforced in Vector Search: after
+`04_index_sync.py` pushes changed chunks to both indexes, it also **retires**
+any key those indexes hold that silver no longer marks current — otherwise a
+re-chunked video leaves stale text behind that the agent can still retrieve
+and cite, which is worse than a miss because it looks authoritative.
+
 **`rag_transcript_agent`** (`make register-rag-agent`) serves three of
 transcript·lab's answer paths from one deployment, chosen per call with
 `custom_inputs={"mode": ...}`: `single` (one retrieval), `multi` (decompose →
