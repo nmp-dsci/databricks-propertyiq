@@ -250,10 +250,17 @@ def retire(index_name: str, batch_size: int = 200) -> int:
         batch = keys[start : start + batch_size]
         retired += _delete(full_name, batch)
 
-    keys_literal = ", ".join(f"'{key}'" for key in keys)
+    # Re-derive the same set in SQL rather than interpolating thousands of key
+    # literals into an IN list: no quoting to get wrong, and no statement-size
+    # ceiling on a large re-chunk. Deleting after the API calls means a failed
+    # batch raises with the state rows intact, so the next run retries them.
     spark.sql(f"""
-        DELETE FROM {prefix}.index_sync_state
-        WHERE index_name = '{index_name}' AND chunk_key IN ({keys_literal})
+        DELETE FROM {prefix}.index_sync_state s
+        WHERE s.index_name = '{index_name}'
+          AND NOT EXISTS (
+            SELECT 1 FROM {prefix}.silver_chunks c
+            WHERE c.chunk_key = s.chunk_key AND c.is_current
+          )
     """)
     print(f"{index_name}: retired {retired:,} row(s)")
     return retired
