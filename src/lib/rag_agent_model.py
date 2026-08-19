@@ -54,7 +54,11 @@ class RagTranscriptAgent(ChatAgent):
         # An unknown mode falls back rather than erroring: the Review App is a
         # free-text UI, and a typo should still get an answer.
         mode = requested if requested in MODES else DEFAULT_MODE
-        result = ask(self._graph(mode), messages[-1].content)
+        # Tag through ask() rather than here: the trace does not exist until
+        # ask() opens its root span, so tagging at this point is a no-op. The
+        # tag lets the Traces tab be filtered by answer path, which is the
+        # whole point of shipping three of them behind one endpoint.
+        result = ask(self._graph(mode), messages[-1].content, tags={"mode": mode})
         return ChatAgentResponse(
             messages=[
                 ChatAgentMessage(

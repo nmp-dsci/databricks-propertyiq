@@ -32,6 +32,7 @@ import json
 from collections.abc import Callable
 from typing import Annotated, Any, TypedDict
 
+import mlflow
 from langgraph.graph import END, StateGraph
 
 MODES = ("single", "multi", "agentic")
@@ -279,8 +280,21 @@ def _parse_action(raw: str) -> dict[str, Any]:
     return {"action": "answer"}
 
 
-def ask(agent, question: str) -> dict[str, Any]:
-    """Run one question; returns the answer plus the trace the eval scores."""
+@mlflow.trace(span_type="AGENT", name="rag_transcript_agent")
+def ask(agent, question: str, tags: dict[str, str] | None = None) -> dict[str, Any]:
+    """Run one question; returns the answer plus the trace the eval scores.
+
+    Traced as the root span so the retriever and LLM spans below it land in one
+    tree. Serving supplies no root of its own for a ChatAgent, and a local run
+    or the benchmark certainly does not — without this each hop would be filed
+    as its own orphan trace, which is what makes a multi-hop answer unreadable.
+
+    `tags` are applied from *inside* the span on purpose. Tagging before calling
+    this (the obvious place, in ChatAgent.predict) silently does nothing: there
+    is no active trace until this function opens one.
+    """
+    if tags:
+        mlflow.update_current_trace(tags=tags)
     state = agent.invoke(
         {"question": question, "hops": 0, "chunks": [], "queries": [], "decision_log": []}
     )
@@ -319,6 +333,11 @@ def make_retriever(
         "text",
     ]
 
+    # Traced as RETRIEVER so the endpoint's Traces tab shows what each hop
+    # actually pulled back, with scores — the span type MLflow renders as
+    # retrieval and the one production monitoring scores for relevance. Nothing
+    # here is a LangChain object, so no autologger would capture it otherwise.
+    @mlflow.trace(span_type="RETRIEVER", name="vector_search")
     def retrieve(query: str, k: int = TOP_K) -> list[dict[str, Any]]:
         embedding = w.serving_endpoints.query(name=embedding_endpoint, input=[query]).data[0]
         response = w.vector_search_indexes.query_index(
@@ -346,6 +365,7 @@ def make_databricks_agent(
 
     w = WorkspaceClient()
 
+    @mlflow.trace(span_type="LLM", name=model_endpoint)
     def llm(messages: list[dict[str, str]]) -> str:
         response = w.serving_endpoints.query(
             name=model_endpoint,

@@ -58,7 +58,14 @@ def log_and_register() -> str:
             python_model=str(REPO / "src" / "lib" / "rag_agent_model.py"),
             code_paths=[str(REPO / "src" / "lib")],
             pip_requirements=[
-                "mlflow>=3.1",
+                # 3.1.3+ is what agents.deploy needs; it is also the floor for
+                # MLflow 3 real-time tracing.
+                "mlflow>=3.1.3",
+                # Must be in the SERVING image, not just this laptop: without
+                # databricks-agents>=1.2 in the container, the endpoint cannot
+                # stream traces and the Traces tab shows "Upgrade to MLflow 3
+                # to enable real-time tracing" even though mlflow itself is 3.x.
+                "databricks-agents>=1.2.0",
                 "langgraph>=1.0",
                 "databricks-sdk>=0.68",
             ],
