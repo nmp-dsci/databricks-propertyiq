@@ -26,13 +26,22 @@ resources:
           notebook_task:
             notebook_path: ../../src/notebooks/rag/02_silver_merge.py
 
-        # Last on purpose: a failed check stops the run before the index syncs,
-        # so a truncated export can never become a re-embedded corpus.
+        # Before the index, on purpose: a failed check stops the run here, so a
+        # truncated export can never become a re-embedded corpus.
         - task_key: checks
           depends_on:
             - task_key: silver
           notebook_task:
             notebook_path: ../../src/notebooks/rag/03_checks.py
+
+        # Embeds what changed and pushes it to both Vector Search indexes. This
+        # is the hand-rolled equivalent of a delta-sync index's own pipeline,
+        # which never provisions on Free Edition (see the notebook header).
+        - task_key: index_sync
+          depends_on:
+            - task_key: checks
+          notebook_task:
+            notebook_path: ../../src/notebooks/rag/04_index_sync.py
 
       # `make rag-export` pushes from the laptop whenever the local corpus
       # moves; this trigger is what turns that push into a pipeline run. A

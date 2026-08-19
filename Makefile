@@ -72,6 +72,10 @@ benchmark: ## Run the 3-way QA benchmark (Genie / LangGraph / Data Pilot) locall
 rag-export: ## Snapshot transcript-lab's corpus and land what changed on the volume
 	@uv run python scripts/rag_export.py
 
+.PHONY: register-rag-agent
+register-rag-agent: ## Log + register rag_transcript_agent to UC and deploy it
+	@uv run python scripts/register_rag_agent.py
+
 .PHONY: rag-export-dry
 rag-export-dry: ## Same, but build and hash only — uploads nothing
 	@uv run python scripts/rag_export.py --dry-run
