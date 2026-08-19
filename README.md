@@ -362,7 +362,27 @@ the three gold tables as model resources at log time, since `agents.deploy`'s
 auto-auth needs them declared to avoid `INSUFFICIENT_PERMISSIONS`. This runs
 **locally**, not as a workspace job — `langgraph` isn't preinstalled on
 serverless job compute, and logging from the laptop needs nothing
-workspace-side.
+workspace-side. `deploy()` sets the MLflow tracking and registry URIs itself
+so it also works standalone (otherwise `agents.deploy` resolves the logged
+model against a local sqlite store and fails with "Logged model not found"),
+and deletes older deployments of the same model before creating the new one —
+Free Edition's provisioned-concurrency quota fits about one served version per
+agent, and `agents.deploy` otherwise accumulates versions until it fails with
+`Quota Exceeded`.
+
+**Real-time tracing on the deployed endpoint** needs the same two things as
+`rag_transcript_agent` (below): `databricks-agents>=1.2.0` in the model's
+`pip_requirements`, baked into the serving image rather than just installed on
+the laptop, and explicit spans, since this agent also calls FMAPI and the SQL
+warehouse via `databricks-sdk` rather than `databricks-langchain` so no
+autologger captures those calls. `ask()` carries an
+`@mlflow.trace(span_type="AGENT")` root — without it every LLM and SQL call
+would land as its own orphan trace, and this agent retries a failed statement
+once, which would scatter one logical answer across several unrelated traces.
+The chat calls are traced as `LLM`; the warehouse statement is traced `TOOL`
+rather than `RETRIEVER`, because this agent answers by executing generated SQL
+rather than retrieving documents, and the span's input is the statement
+itself — the most useful thing to see when an answer looks wrong.
 
 **`evals/golden_qa.yaml`** is the confirmed golden question set: each case
 has a question, a grader spec, and an answer computed by deterministic SQL

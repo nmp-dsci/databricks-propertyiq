@@ -8,11 +8,13 @@ build installs the model's own pip requirements.
 Deploy order (s05 plan, decision D2 adjacent):
   1. Log the ChatAgent (models-from-code) and register propertyiq_ml.qa_agent.
   2. Smoke-test the registered model locally (load + one question).
-  3. Try agents.deploy() — the Agent Framework path (unverified on Free
-     Edition; this run is the probe).
+  3. Try agents.deploy() — the Agent Framework path, verified live on Free
+     Edition; clears older deployments of the same model first since the
+     provisioned-concurrency quota fits about one served version per agent.
   4. Fall back to a plain CPU serving endpoint with auth passed via env vars
      backed by a secret scope, the same serving pattern the s03 rent
-     estimator proved live.
+     estimator proved live. Retained for the workspaces where agents.deploy
+     isn't available.
 """
 
 from __future__ import annotations
