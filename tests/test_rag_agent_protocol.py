@@ -29,8 +29,11 @@ def search_reply(query: str, gaps: list[str] | None = None) -> str:
     return json.dumps(action)
 
 
-def test_default_protocol_is_still_v1():
-    assert DEFAULT_PROTOCOL == "v1"
+def test_default_protocol_is_the_shipped_react_loop():
+    # The s09 close-out decision: agentic mode ships as tool-calling ReAct.
+    assert DEFAULT_PROTOCOL == "react"
+    assert PROTOCOL_MAX_HOPS["react"] == 8
+    # The measured record stays selectable.
     assert PROTOCOL_MAX_HOPS["v1"] == 3
 
 

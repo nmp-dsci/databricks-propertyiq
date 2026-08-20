@@ -548,7 +548,10 @@ def main() -> None:
     from databricks.sdk import WorkspaceClient
 
     w = WorkspaceClient()
-    llm = rag_agent.make_fmapi_llm(args.model, workspace_client=w)
+    if args.protocol == "react":
+        llm = rag_agent.make_fmapi_tool_llm(args.model, workspace_client=w)
+    else:
+        llm = rag_agent.make_fmapi_llm(args.model, workspace_client=w)
     counter = CountingRetriever(rag_agent.make_retriever(INDEX_NAME, workspace_client=w))
 
     golden_rows: list[dict] | None = None

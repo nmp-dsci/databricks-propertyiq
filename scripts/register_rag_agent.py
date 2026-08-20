@@ -35,7 +35,11 @@ CATALOG = "workspace"
 SCHEMA = "rag"
 MODEL_NAME = f"{CATALOG}.{SCHEMA}.rag_transcript_agent"
 INDEX_NAME = f"{CATALOG}.{SCHEMA}.rag_chunks_gte"
-LLM_ENDPOINT = "databricks-meta-llama-3-3-70b-instruct"
+LLM_ENDPOINT = "databricks-qwen35-122b-a10b"
+# Declared alongside the default so RAG_LLM_ENDPOINT can flip the served agent
+# between the two without re-registering (auth is injected per declared
+# resource; an undeclared endpoint would 403 at query time).
+FALLBACK_LLM_ENDPOINT = "databricks-meta-llama-3-3-70b-instruct"
 EMBEDDING_ENDPOINT = "databricks-gte-large-en"
 
 
@@ -73,8 +77,9 @@ def log_and_register() -> str:
                 # The retriever's two legs: embed the question, then search.
                 DatabricksVectorSearchIndex(index_name=INDEX_NAME),
                 DatabricksServingEndpoint(endpoint_name=EMBEDDING_ENDPOINT),
-                # The answer leg.
+                # The answer leg, plus the env-var fallback model.
                 DatabricksServingEndpoint(endpoint_name=LLM_ENDPOINT),
+                DatabricksServingEndpoint(endpoint_name=FALLBACK_LLM_ENDPOINT),
                 # The index's source table — a declared index alone still left
                 # the QA agent without USE SCHEMA on its data.
                 DatabricksTable(table_name=f"{CATALOG}.{SCHEMA}.silver_chunks"),

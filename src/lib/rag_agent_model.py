@@ -34,9 +34,7 @@ class RagTranscriptAgent(ChatAgent):
         if mode not in self._agents:
             self._agents[mode] = make_databricks_agent(
                 index_name=os.environ.get("RAG_INDEX_NAME", "workspace.rag.rag_chunks_gte"),
-                model_endpoint=os.environ.get(
-                    "RAG_LLM_ENDPOINT", "databricks-meta-llama-3-3-70b-instruct"
-                ),
+                model_endpoint=os.environ.get("RAG_LLM_ENDPOINT", "databricks-qwen35-122b-a10b"),
                 embedding_endpoint=os.environ.get(
                     "RAG_EMBEDDING_ENDPOINT", "databricks-gte-large-en"
                 ),

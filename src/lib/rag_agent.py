@@ -55,6 +55,15 @@ MAX_HOPS = 3
 # v3 makes decide drive the first retrieval too, and adds a stop rule so the
 # budget is spent on gaps, not spirals.
 #
+# "react" is what actually ships (s09 close-out): retrieval as a native
+# function-calling TOOL, the model looping search -> read -> search until it
+# answers without a tool call — transcript-lab's exact structure, which the
+# matrix proved is the only shape whose research behaviour survives contact
+# with every model temperament: prompts persuaded llama (v2: 2.5 hops) but
+# not gpt-oss (1.3); mechanical fan-out forced hops but flooded the judge;
+# the tool loop makes searching the *path of least resistance* instead of an
+# instruction to obey. v1-v4 remain selectable as the measured record.
+#
 # v4 is the matrix's synthesis: decompose-first agentic. The model's own
 # decomposition (multi's tested node) buys the research floor mechanically —
 # a broad question fans out into up-to-3 sub-queries, one retrieval each,
@@ -64,9 +73,9 @@ MAX_HOPS = 3
 # structured Key Findings contract cost narrow questions real composite in
 # both v2 and v3). Dev's protocol steps 2-3 ARE decomposition, so this is the
 # closer port, not a workaround.
-PROTOCOLS = ("v1", "v2", "v3", "v4")
-DEFAULT_PROTOCOL = "v1"
-PROTOCOL_MAX_HOPS = {"v1": MAX_HOPS, "v2": 6, "v3": 6, "v4": 6}
+PROTOCOLS = ("v1", "v2", "v3", "v4", "react")
+DEFAULT_PROTOCOL = "react"
+PROTOCOL_MAX_HOPS = {"v1": MAX_HOPS, "v2": 6, "v3": 6, "v4": 6, "react": 8}
 
 SYSTEM = """\
 You answer questions about a corpus of YouTube transcripts covering data
@@ -91,6 +100,8 @@ class RagState(TypedDict, total=False):
     # Every query already searched (v2 protocol): fed back into the decide
     # prompt so the model cannot burn its hop budget re-running one query.
     asked: list[str]
+    # The react protocol's rolling conversation (OpenAI-shaped dicts).
+    messages: Annotated[list[dict[str, Any]], lambda a, b: a + b]
     answer: str
     decision_log: Annotated[list[str], lambda a, b: a + b]
 
@@ -144,6 +155,152 @@ excerpts that support it. For a narrow factual question, a single finding with
 a short expansion is fine."""
 
 
+RETRIEVE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "retrieve_transcript_chunks",
+        "description": (
+            "Search the indexed YouTube transcript corpus for excerpts relevant "
+            "to a focused query. Call it once per distinct sub-topic; results "
+            "accumulate across calls."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "focused, specific search query"}
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+REACT_SYSTEM = (
+    SYSTEM
+    + """
+Research protocol:
+1. Start by calling retrieve_transcript_chunks with the user's question to see
+   what the corpus covers.
+2. From those results, identify the distinct sub-topics worth evidence of
+   their own, and call the tool once per sub-topic with a focused query —
+   not a paraphrase of the original question.
+3. A broad question (a guide, a comparison, "what do the videos say about X")
+   typically needs 4-8 calls; a narrow factual question 1-2. Stop as soon as
+   the excerpts fully answer the question — extra searches past that point
+   dilute the evidence.
+4. Then answer WITHOUT calling the tool, from the accumulated excerpts only.
+   If you researched more than one sub-topic, structure the answer as
+   '## Key Findings' (numbered, cited) followed by one short titled section
+   per finding; for a narrow question, plain cited prose is fine."""
+)
+
+
+def build_react_agent(
+    tool_llm: Callable[[list[dict[str, Any]], list[dict] | None], dict[str, Any]],
+    retrieve: Callable[[str, int], list[dict[str, Any]]],
+    max_iterations: int | None = None,
+):
+    """The shipped agentic mode: retrieval as a native function-calling tool.
+
+    ``tool_llm`` takes (messages, tools) and returns the assistant message as
+    a plain dict — ``{"content": str|None, "tool_calls": [...]}`` in the
+    OpenAI-compatible shape FMAPI speaks. The model loops search -> read ->
+    search until it answers without a tool call; the only hard cap is
+    ``max_iterations`` tool calls, after which one final tool-less call is
+    forced so the run always ends in an answer rather than a stall.
+    """
+    cap = max_iterations if max_iterations is not None else PROTOCOL_MAX_HOPS["react"]
+
+    def agent(state: RagState) -> RagState:
+        messages = list(state.get("messages") or [])
+        if not messages:
+            messages = [
+                {"role": "system", "content": REACT_SYSTEM},
+                {"role": "user", "content": state["question"]},
+            ]
+        hops = state.get("hops", 0)
+        at_cap = hops >= cap
+        if at_cap:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Stop researching. Answer now from the excerpts already "
+                        "retrieved, with citations."
+                    ),
+                }
+            )
+        reply = tool_llm(messages, None if at_cap else [RETRIEVE_TOOL])
+        entry = dict(reply)
+        entry["role"] = "assistant"
+        if at_cap:
+            # No tools were offered, so no tool call is honoured — the route
+            # must terminate here even against a model that emits one anyway.
+            entry["tool_calls"] = None
+        tool_calls = entry.get("tool_calls") or []
+        log = (
+            [f"agent: {len(tool_calls)} tool call(s)"]
+            if tool_calls
+            else [f"agent: answered after {hops} search(es)"]
+        )
+        if at_cap:
+            log = [f"agent: hop cap ({cap}) reached, answer forced"]
+        appended = messages[len(state.get("messages") or []) :] + [entry]
+        return {"messages": appended, "decision_log": log}
+
+    def tools(state: RagState) -> RagState:
+        last = (state.get("messages") or [])[-1]
+        found_all: list[dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
+        hops = state.get("hops", 0)
+        for call in last.get("tool_calls") or []:
+            try:
+                arguments = json.loads(call.get("function", {}).get("arguments") or "{}")
+            except ValueError:
+                arguments = {}
+            query = str(arguments.get("query") or state["question"])
+            found = retrieve(query, TOP_K)
+            found_all.extend(found)
+            hops += 1
+            results.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call.get("id") or "",
+                    "content": format_chunks(dedupe_chunks(found)),
+                }
+            )
+        merged = dedupe_chunks((state.get("chunks") or []) + found_all)
+        return {
+            "messages": results,
+            "chunks": merged,
+            "hops": hops,
+            "decision_log": [
+                f"tool: +{len(found_all)} excerpts across {len(results)} call(s), "
+                f"{len(merged)} unique total"
+            ],
+        }
+
+    def route(state: RagState) -> str:
+        last = (state.get("messages") or [])[-1]
+        return "tools" if last.get("tool_calls") else "done"
+
+    def finish(state: RagState) -> RagState:
+        last = (state.get("messages") or [])[-1]
+        answer = normalize_content(last.get("content"))
+        if not answer.strip():
+            answer = "I couldn't find anything in the transcript corpus that answers that."
+        return {"answer": answer, "decision_log": ["answer: from the tool-use loop"]}
+
+    graph = StateGraph(RagState)
+    graph.add_node("agent", agent)
+    graph.add_node("tools", tools)
+    graph.add_node("finish", finish)
+    graph.set_entry_point("agent")
+    graph.add_conditional_edges("agent", route, {"tools": "tools", "done": "finish"})
+    graph.add_edge("tools", "agent")
+    graph.add_edge("finish", END)
+    return graph.compile()
+
+
 def build_agent(
     llm: Callable[[list[dict[str, str]]], str],
     retrieve: Callable[[str, int], list[dict[str, Any]]],
@@ -161,6 +318,11 @@ def build_agent(
         raise ValueError(f"unknown mode {mode!r}, expected one of {MODES}")
     if protocol not in PROTOCOLS:
         raise ValueError(f"unknown protocol {protocol!r}, expected one of {PROTOCOLS}")
+    if mode == "agentic" and protocol == "react":
+        # The shipped shape. ``llm`` must be the tool-capable callable here —
+        # (messages, tools) -> assistant message dict; make_databricks_agent
+        # wires make_fmapi_tool_llm for it.
+        return build_react_agent(llm, retrieve, max_iterations=max_hops)
     hop_budget = max_hops if max_hops is not None else PROTOCOL_MAX_HOPS[protocol]
     research = mode == "agentic" and protocol in ("v2", "v3", "v4")
 
@@ -539,9 +701,41 @@ def make_fmapi_llm(
     return llm
 
 
+def make_fmapi_tool_llm(
+    model_endpoint: str = "databricks-qwen35-122b-a10b",
+    workspace_client=None,
+):
+    """(messages, tools) -> assistant message dict over one FMAPI endpoint.
+
+    Goes through the OpenAI-compatible invocations route via the SDK's
+    api_client — the typed query() surface has no ``tools`` parameter, and
+    this keeps databricks-sdk the only dependency. Function calling on this
+    route is proven live on Free Edition (P5 probe).
+    """
+    from databricks.sdk import WorkspaceClient
+
+    w = workspace_client or WorkspaceClient()
+
+    @mlflow.trace(span_type="LLM", name=model_endpoint)
+    def tool_llm(messages: list[dict[str, Any]], tools: list[dict] | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {"messages": messages, "temperature": 0.0}
+        if tools:
+            body["tools"] = tools
+        response = w.api_client.do(
+            "POST", f"/serving-endpoints/{model_endpoint}/invocations", body=body
+        )
+        message = dict(response["choices"][0]["message"])
+        return message
+
+    return tool_llm
+
+
 def make_databricks_agent(
     index_name: str = "workspace.rag.rag_chunks_gte",
-    model_endpoint: str = "databricks-meta-llama-3-3-70b-instruct",
+    # qwen3.5: the matrix's model finding — tool-use-trained, it researches
+    # through the react loop like dev's DeepSeek (llama made one call and
+    # stopped; gpt-oss two). llama remains one env var away for comparisons.
+    model_endpoint: str = "databricks-qwen35-122b-a10b",
     embedding_endpoint: str = "databricks-gte-large-en",
     mode: str = DEFAULT_MODE,
     protocol: str = DEFAULT_PROTOCOL,
@@ -551,6 +745,9 @@ def make_databricks_agent(
     from databricks.sdk import WorkspaceClient
 
     w = WorkspaceClient()
-    llm = make_fmapi_llm(model_endpoint, workspace_client=w)
     retrieve = make_retriever(index_name, embedding_endpoint, workspace_client=w)
+    if mode == "agentic" and protocol == "react":
+        llm = make_fmapi_tool_llm(model_endpoint, workspace_client=w)
+    else:
+        llm = make_fmapi_llm(model_endpoint, workspace_client=w)
     return build_agent(llm, retrieve, mode=mode, protocol=protocol, max_hops=max_hops)
