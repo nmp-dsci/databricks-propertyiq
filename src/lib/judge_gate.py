@@ -12,9 +12,9 @@ The s09 plan's success gate, as code the matrix runner and the tests share:
                     hop is correct behaviour, whatever dev does.
 
 Rows are plain dicts with at least ``category``, and ``composite`` / ``hops``
-where scored; a row whose composite is None (judge failure) is excluded from
-means rather than counted as zero, mirroring the judge's own renormalisation
-rule.
+where scored; a row whose composite is None or NaN (judge failure) is excluded
+from means rather than counted as zero, mirroring the judge's own
+renormalisation rule.
 """
 
 from __future__ import annotations

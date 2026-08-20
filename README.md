@@ -503,7 +503,10 @@ from its cited chunk keys (budget 16, same as the parity judge), and judges
 groundedness / relevance / correctness-vs-golden / five depth metrics with
 `ai_query` on gpt-oss — pure SQL, appended to `judge_scores` under rubric
 `native-v1` and asserted against regression (the job fails if broad questions
-average ≤ 1.5 hops). One honest judge finding worth knowing before reading
+average ≤ 1.5 hops, and fails loudly rather than silently if any broad
+question errored or came back empty from the live endpoint, which would
+otherwise just drop out of the mean and mask an outage). One honest judge
+finding worth knowing before reading
 the numbers: under a context-budgeted judge, *wide research lowers composite
 scores* — the dev goldens themselves (9-hop answers) score 0.622 broad, below
 the old single-hop agent's 0.691 — so hops and video breadth carry the

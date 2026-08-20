@@ -465,7 +465,9 @@ def print_gate(variant: str, baseline: str | None) -> None:
 
 def finalize(work: Path, source: Path, baseline: str | None) -> None:
     """Complete a killed run from its persisted work dir: judge whatever is
-    missing (the bridge resumes), merge, insert UC rows, print the gate."""
+    missing (the bridge resumes), merge, insert UC rows (skipped if a prior
+    finalize already inserted them), log the paired MLflow run, print the
+    gate."""
     rows = [
         json.loads(line)
         for line in (work / "rows.jsonl").read_text(encoding="utf-8").splitlines()
