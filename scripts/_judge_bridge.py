@@ -141,16 +141,31 @@ def main() -> None:
         for line in Path(args.input).read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+
+    # Resumable by construction: records already in the output file are kept
+    # and skipped, and each new verdict is appended (under a lock) the moment
+    # it lands — a killed run costs only its in-flight records, which matters
+    # in a harness that reaps long-running processes.
+    output_path = Path(args.output)
+    already: dict[str, dict] = {}
+    if output_path.exists():
+        for line in output_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                verdict = json.loads(line)
+                if verdict.get("id") and not verdict.get("error"):
+                    already[str(verdict["id"])] = verdict
+    todo = [record for record in records if str(record.get("id")) not in already]
     print(
-        f"judging {len(records)} record(s), {args.workers} worker(s), "
-        f"context budget {args.max_contexts}",
+        f"judging {len(todo)}/{len(records)} record(s) ({len(already)} already scored), "
+        f"{args.workers} worker(s), context budget {args.max_contexts}",
         file=sys.stderr,
     )
 
     done = 0
     lock = threading.Lock()
+    handle = output_path.open("a", encoding="utf-8")
 
-    def score_one(record: dict) -> dict:
+    def score_one(record: dict) -> None:
         nonlocal done
         ragas_judge, depth_judge = judges()
         try:
@@ -159,18 +174,16 @@ def main() -> None:
             scored = {"id": record.get("id"), "error": str(exc)}
         with lock:
             done += 1
+            handle.write(json.dumps(scored) + "\n")
+            handle.flush()
             print(
-                f"  [{done}/{len(records)}] {scored.get('id')} -> {scored.get('composite')}",
+                f"  [{done}/{len(todo)}] {scored.get('id')} -> {scored.get('composite')}",
                 file=sys.stderr,
             )
-        return scored
 
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
-        results = list(pool.map(score_one, records))
-
-    with Path(args.output).open("w", encoding="utf-8") as handle:
-        for scored in results:
-            handle.write(json.dumps(scored) + "\n")
+        list(pool.map(score_one, todo))
+    handle.close()
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -154,30 +155,37 @@ def collect_answers(base_url: str, force_ask: bool) -> list[dict[str, Any]]:
     return records
 
 
-def judge_records(records: list[dict[str, Any]], source: Path) -> list[dict[str, Any]]:
+def judge_records(
+    records: list[dict[str, Any]], source: Path, workers: int = 6
+) -> list[dict[str, Any]]:
     """Score every captured answer through the dev judge bridge."""
     venv_python = source / ".venv" / "bin" / "python"
     if not venv_python.exists():
         raise SystemExit(f"{venv_python} not found — run `uv sync` in {source} first")
 
-    work = Path(tempfile.mkdtemp(prefix="golden_judge_"))
+    # A stable work dir keyed on the request content (not mkdtemp): the
+    # bridge appends verdicts as they land and skips ids already scored, so a
+    # rerun after a kill resumes — while any change to the answers changes the
+    # key and forces a fresh judging pass instead of reusing stale verdicts.
+    payload = "".join(
+        json.dumps(
+            {
+                "id": record["question_id"],
+                "question": record["question"],
+                "answer": record["answer"],
+                "contexts": record["contexts"],
+                "answer_model": record["answer_model"],
+            }
+        )
+        + "\n"
+        for record in records
+    )
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:8]
+    work = Path(tempfile.gettempdir()) / f"propertyiq_golden_judge_{digest}"
+    work.mkdir(exist_ok=True)
     request_path = work / "records.jsonl"
     scored_path = work / "scored.jsonl"
-    with request_path.open("w", encoding="utf-8") as handle:
-        for record in records:
-            handle.write(
-                json.dumps(
-                    {
-                        "id": record["question_id"],
-                        "question": record["question"],
-                        "answer": record["answer"],
-                        "contexts": record["contexts"],
-                        "answer_model": record["answer_model"],
-                    }
-                )
-                + "\n"
-            )
-
+    request_path.write_text(payload, encoding="utf-8")
     result = subprocess.run(  # noqa: S603 — fixed argv, paths validated above
         [
             str(venv_python),
@@ -188,6 +196,8 @@ def judge_records(records: list[dict[str, Any]], source: Path) -> list[dict[str,
             str(request_path),
             "--output",
             str(scored_path),
+            "--workers",
+            str(workers),
         ],
         check=False,
     )
@@ -257,6 +267,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--force-ask", action="store_true", help="re-ask every question")
     parser.add_argument("--skip-judge", action="store_true", help="capture answers only")
+    parser.add_argument("--judge-workers", type=int, default=6)
     args = parser.parse_args()
 
     source = Path(args.source or os.environ.get("RAG_SOURCE_DIR") or DEFAULT_SOURCE).resolve()
@@ -271,7 +282,7 @@ def main() -> None:
         raise SystemExit("no answers captured — is the corpus indexed?")
     if not args.skip_judge:
         print(f"\njudging {len(records)} answer(s) with the dev judge ...")
-        records = judge_records(records, source)
+        records = judge_records(records, source, workers=args.judge_workers)
 
     frame = golden_answer_rows(records)
     upload(frame, dry_run=args.dry_run)
