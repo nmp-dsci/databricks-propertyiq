@@ -47,9 +47,16 @@ MAX_HOPS = 3
 # which is what turned the dev agent into a researcher while v1 stopped after
 # one hop: with eight plausible excerpts already attached, "do you have enough?"
 # is nearly always answerable with yes.
-PROTOCOLS = ("v1", "v2")
+#
+# v3 is v2 without the seed retrieval — the structural half of the port. The
+# matrix showed the seed is an excuse to stop: llama on v2 researched (2.5
+# broad hops) but gpt-oss read the eight seeded chunks and answered from them
+# (1.3). Dev's loop never had a seed; its model must search to see anything.
+# v3 makes decide drive the first retrieval too, and adds a stop rule so the
+# budget is spent on gaps, not spirals.
+PROTOCOLS = ("v1", "v2", "v3")
 DEFAULT_PROTOCOL = "v1"
-PROTOCOL_MAX_HOPS = {"v1": MAX_HOPS, "v2": 6}
+PROTOCOL_MAX_HOPS = {"v1": MAX_HOPS, "v2": 6, "v3": 6}
 
 SYSTEM = """\
 You answer questions about a corpus of YouTube transcripts covering data
@@ -145,7 +152,7 @@ def build_agent(
     if protocol not in PROTOCOLS:
         raise ValueError(f"unknown protocol {protocol!r}, expected one of {PROTOCOLS}")
     hop_budget = max_hops if max_hops is not None else PROTOCOL_MAX_HOPS[protocol]
-    v2 = mode == "agentic" and protocol == "v2"
+    research = mode == "agentic" and protocol in ("v2", "v3")
 
     # -- shared nodes ------------------------------------------------------
 
@@ -157,7 +164,7 @@ def build_agent(
                 "decision_log": ["answer: no excerpts retrieved"],
             }
         instruction = "Answer the question from these excerpts, with citations."
-        if v2:
+        if research:
             instruction += "\n" + ANSWER_STRUCTURE_V2
         text = llm(
             [
@@ -255,7 +262,13 @@ def build_agent(
             "   corpus likely has more — search for it with a focused query that\n"
             "   targets that sub-topic specifically. Never paraphrase the original\n"
             "   question as the query.\n\n"
-            "Reply with JSON only, on one line:\n"
+            + (
+                "5. Once the excerpts fully answer the question, stop and answer — "
+                "searches past that point dilute evidence quality.\n\n"
+                if protocol == "v3"
+                else "\n"
+            )
+            + "Reply with JSON only, on one line:\n"
             '{"action": "search", "query": "<focused sub-topic query>", '
             '"gaps": ["<uncovered sub-topic>", "..."]}\n'
             "or, only when every sub-topic is covered:\n"
@@ -284,7 +297,7 @@ def build_agent(
             # v2 only: v1 is the measured baseline and must keep its shipped
             # behaviour bit-for-bit, repeated queries included.
             asked = {previous.strip().lower() for previous in (state.get("asked") or [])}
-            if v2 and query.lower() in asked:
+            if research and query.lower() in asked:
                 # A repeated query would spend a hop re-reading the same rows;
                 # treat it as the model having nothing new to look for.
                 return {
@@ -331,11 +344,16 @@ def build_agent(
         graph.add_edge("decompose", "retrieve")
         graph.add_edge("retrieve", "answer")
     else:  # agentic
-        graph.add_node("seed", retrieve_once)
         graph.add_node("decide", decide)
         graph.add_node("search", search)
-        graph.set_entry_point("seed")
-        graph.add_edge("seed", "decide")
+        if protocol == "v3":
+            # No seed: the model sees nothing until it searches, the same
+            # structural forcing the dev ReAct loop gets from tool calling.
+            graph.set_entry_point("decide")
+        else:
+            graph.add_node("seed", retrieve_once)
+            graph.set_entry_point("seed")
+            graph.add_edge("seed", "decide")
         graph.add_conditional_edges(
             "decide", needs_search, {"search": "search", "answer": "answer"}
         )

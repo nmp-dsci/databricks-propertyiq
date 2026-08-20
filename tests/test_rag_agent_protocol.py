@@ -151,3 +151,53 @@ def test_normalize_content_extracts_text_parts_and_drops_reasoning():
 def test_normalize_content_joins_multiple_text_parts():
     content = [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}, "c"]
     assert normalize_content(content) == "a\nb\nc"
+
+
+# ---------------------------------------------------------------------------
+# protocol v3 — seedless: the model drives the first retrieval too
+# ---------------------------------------------------------------------------
+
+
+def test_v3_starts_at_decide_with_no_seed_retrieval():
+    llm = ScriptedLLM(
+        [
+            search_reply("databricks solutions architect interview process"),
+            json.dumps({"action": "answer"}),
+            "## Key Findings\n1. ... [Video v1 @ 01:05]",
+        ]
+    )
+    retriever = ScriptedRetriever([[chunk("v1:0")]])
+    agent = build_agent(llm, retriever, mode="agentic", protocol="v3")
+    result = ask(agent, "Guide me on Databricks for an SA interview")
+
+    # Only the model-issued query hits the retriever — no seed with the raw question.
+    assert retriever.queries == ["databricks solutions architect interview process"]
+    first_decide = llm.calls[0][1]["content"]
+    assert "(no excerpts retrieved)" in first_decide
+    assert result["chunk_keys"] == ["v1:0"]
+
+
+def test_v3_prompt_carries_the_stop_rule_and_v2_does_not():
+    for protocol, expected in (("v3", True), ("v2", False)):
+        llm = ScriptedLLM([json.dumps({"action": "answer"}), "answer"])
+        retriever = ScriptedRetriever([[chunk("v1:0")]])
+        agent = build_agent(llm, retriever, mode="agentic", protocol=protocol)
+        ask(agent, "q")
+        prompt = llm.calls[0][1]["content"]
+        assert ("dilute evidence quality" in prompt) is expected, protocol
+
+
+def test_v3_immediate_answer_without_searching_is_the_honest_miss():
+    llm = ScriptedLLM([json.dumps({"action": "answer"})])
+    retriever = ScriptedRetriever()
+    agent = build_agent(llm, retriever, mode="agentic", protocol="v3")
+    result = ask(agent, "q")
+    assert retriever.queries == []
+    assert "couldn't find anything" in result["answer"]
+
+
+def test_v3_budget_is_six_searches():
+    replies = [search_reply(f"query {i}") for i in range(10)] + ["answer [Video v1 @ 01:05]"]
+    agent = build_agent(ScriptedLLM(replies), ScriptedRetriever(), mode="agentic", protocol="v3")
+    result = ask(agent, "q")
+    assert any("hop cap (6)" in line for line in result["decision_log"])

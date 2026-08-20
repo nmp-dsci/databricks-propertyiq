@@ -122,7 +122,13 @@ def run_questions(
     return rows
 
 
-def judge_rows(rows: list[dict], source: Path, answer_model: str, variant_label: str) -> Path:
+def judge_rows(
+    rows: list[dict],
+    source: Path,
+    answer_model: str,
+    variant_label: str,
+    config: dict[str, Any] | None = None,
+) -> Path:
     """Score rows in place through the dev judge bridge (parity layer)."""
     venv_python = source / ".venv" / "bin" / "python"
     if not venv_python.exists():
@@ -153,6 +159,10 @@ def judge_rows(rows: list[dict], source: Path, answer_model: str, variant_label:
     # persisting them beside the judge files makes --finalize possible after
     # a mid-judge kill instead of re-running the whole variant.
     (work / "rows.jsonl").write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+    if config is not None:
+        # Before the bridge launches, not after it returns: a kill mid-judging
+        # must leave everything --finalize needs.
+        (work / "config.json").write_text(json.dumps(config))
     result = subprocess.run(  # noqa: S603 — fixed argv, paths validated above
         [
             str(venv_python),
@@ -573,13 +583,13 @@ def main() -> None:
         config_for_finalize = dict(config)
         if not args.skip_judge:
             print(f"judging {len(rows)} answer(s) with the dev judge ...")
-            work_dir = judge_rows(
+            judge_rows(
                 rows,
                 Path(args.source),
                 answer_model=args.model,
                 variant_label=f"{args.variant}_{mode}",
+                config=config_for_finalize,
             )
-            (work_dir / "config.json").write_text(json.dumps(config_for_finalize))
         # UC rows first: the gate and dashboard read them, and the MLflow
         # logging tail has stalled on auth-token churn before — telemetry must
         # never hold the verdict hostage.
