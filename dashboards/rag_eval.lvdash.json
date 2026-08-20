@@ -1,95 +1,120 @@
 {
   "datasets": [
     {
-      "name": "ds_summary",
       "displayName": "Retrieval quality by contender (latest run)",
+      "name": "ds_summary",
       "queryLines": [
-        "SELECT contender, ",
-        "       avg(video_recall) AS recall_at_10, ",
-        "       avg(video_mrr) AS mrr, ",
-        "       avg(video_ndcg) AS ndcg_at_10, ",
-        "       avg(latency_s) AS latency_s ",
-        "FROM workspace.rag.rag_eval ",
-        "WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval) ",
-        "GROUP BY contender"
+        "SELECT contender,        avg(video_recall) AS recall_at_10,        avg(video_mrr) AS mrr,        avg(video_ndcg) AS ndcg_at_10,        avg(latency_s) AS latency_s FROM workspace.rag.rag_eval WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval) GROUP BY contender"
       ]
     },
     {
-      "name": "ds_metric_long",
       "displayName": "Metrics in long form for the grouped bar",
+      "name": "ds_metric_long",
+      "queryLines": [
+        "WITH latest AS (   SELECT * FROM workspace.rag.rag_eval WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval) ) SELECT contender, 'recall@10' AS metric, avg(video_recall) AS score FROM latest GROUP BY contender UNION ALL SELECT contender, 'MRR', avg(video_mrr) FROM latest GROUP BY contender UNION ALL SELECT contender, 'NDCG@10', avg(video_ndcg) FROM latest GROUP BY contender"
+      ]
+    },
+    {
+      "displayName": "Recall by question domain",
+      "name": "ds_domain",
+      "queryLines": [
+        "SELECT domain, contender, avg(video_recall) AS recall_at_10 FROM workspace.rag.rag_eval WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval) GROUP BY domain, contender"
+      ]
+    },
+    {
+      "displayName": "Per-question detail",
+      "name": "ds_detail",
+      "queryLines": [
+        "SELECT case_id, domain, question_type, contender,        video_recall, video_mrr, video_ndcg, latency_s,        chunk_anchors_resolved, chunk_anchors_unresolved, retrieved_videos FROM workspace.rag.rag_eval WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval) ORDER BY case_id, contender"
+      ]
+    },
+    {
+      "displayName": "Golden anchor health",
+      "name": "ds_anchors",
+      "queryLines": [
+        "SELECT sum(chunk_anchors_resolved) / 3 AS resolved,        sum(chunk_anchors_unresolved) / 3 AS unresolved FROM workspace.rag.rag_eval WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval)"
+      ]
+    },
+    {
+      "displayName": "Judged variant runs + dev goldens, question level",
+      "name": "ds_judge",
       "queryLines": [
         "WITH latest AS ( ",
-        "  SELECT * FROM workspace.rag.rag_eval WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval) ",
+        "  SELECT variant, max(run_at) AS run_at FROM workspace.rag.judge_scores WHERE mode = 'agentic' GROUP BY variant ",
+        "), v AS ( ",
+        "  SELECT s.variant, s.category, s.question_id, s.hops, s.unique_videos, ",
+        "         s.composite, s.faithfulness, s.coverage, s.evidence_breadth ",
+        "  FROM workspace.rag.judge_scores s JOIN latest l ON s.variant = l.variant AND s.run_at = l.run_at ",
+        "  WHERE s.mode = 'agentic' ",
+        "), g AS ( ",
+        "  SELECT 'dev_golden' AS variant, category, question_id, iterations AS hops, ",
+        "         NULL AS unique_videos, composite, faithfulness, coverage, evidence_breadth ",
+        "  FROM workspace.rag.silver_golden_answers WHERE is_current ",
         ") ",
-        "SELECT contender, 'recall@10' AS metric, avg(video_recall) AS score FROM latest GROUP BY contender ",
-        "UNION ALL ",
-        "SELECT contender, 'MRR', avg(video_mrr) FROM latest GROUP BY contender ",
-        "UNION ALL ",
-        "SELECT contender, 'NDCG@10', avg(video_ndcg) FROM latest GROUP BY contender"
+        "SELECT * FROM v UNION ALL SELECT * FROM g"
       ]
     },
     {
-      "name": "ds_domain",
-      "displayName": "Recall by question domain",
+      "displayName": "Composite + hops by variant and stratum",
+      "name": "ds_judge_summary",
       "queryLines": [
-        "SELECT domain, contender, avg(video_recall) AS recall_at_10 ",
-        "FROM workspace.rag.rag_eval ",
-        "WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval) ",
-        "GROUP BY domain, contender"
-      ]
-    },
-    {
-      "name": "ds_detail",
-      "displayName": "Per-question detail",
-      "queryLines": [
-        "SELECT case_id, domain, question_type, contender, ",
-        "       video_recall, video_mrr, video_ndcg, latency_s, ",
-        "       chunk_anchors_resolved, chunk_anchors_unresolved, retrieved_videos ",
-        "FROM workspace.rag.rag_eval ",
-        "WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval) ",
-        "ORDER BY case_id, contender"
-      ]
-    },
-    {
-      "name": "ds_anchors",
-      "displayName": "Golden anchor health",
-      "queryLines": [
-        "SELECT sum(chunk_anchors_resolved) / 3 AS resolved, ",
-        "       sum(chunk_anchors_unresolved) / 3 AS unresolved ",
-        "FROM workspace.rag.rag_eval ",
-        "WHERE run_at = (SELECT max(run_at) FROM workspace.rag.rag_eval)"
+        "WITH latest AS ( ",
+        "  SELECT variant, max(run_at) AS run_at FROM workspace.rag.judge_scores WHERE mode = 'agentic' GROUP BY variant ",
+        "), v AS ( ",
+        "  SELECT s.variant, s.category, avg(s.hops) AS hops, avg(s.composite) AS composite ",
+        "  FROM workspace.rag.judge_scores s JOIN latest l ON s.variant = l.variant AND s.run_at = l.run_at ",
+        "  WHERE s.mode = 'agentic' GROUP BY s.variant, s.category ",
+        "), g AS ( ",
+        "  SELECT 'dev_golden' AS variant, category, avg(iterations) AS hops, avg(composite) AS composite ",
+        "  FROM workspace.rag.silver_golden_answers WHERE is_current GROUP BY category ",
+        ") ",
+        "SELECT * FROM v UNION ALL SELECT * FROM g"
       ]
     }
   ],
   "pages": [
     {
-      "name": "page_verdict",
       "displayName": "Verdict",
-      "pageType": "PAGE_TYPE_CANVAS",
       "layout": [
         {
+          "position": {
+            "height": 1,
+            "width": 6,
+            "x": 0,
+            "y": 0
+          },
           "widget": {
-            "name": "title",
             "multilineTextboxSpec": {
               "lines": [
-                "# Chroma vs Vector Search — retrieval verdict"
+                "# Chroma vs Vector Search \u2014 retrieval verdict"
               ]
-            }
-          },
-          "position": { "x": 0, "y": 0, "width": 6, "height": 1 }
+            },
+            "name": "title"
+          }
         },
         {
+          "position": {
+            "height": 2,
+            "width": 6,
+            "x": 0,
+            "y": 1
+          },
           "widget": {
-            "name": "subtitle",
             "multilineTextboxSpec": {
               "lines": [
                 "transcript-lab's own 20-question golden set, run against three retrievers so each comparison moves **one** variable. `chroma` is the local baseline (MiniLM vectors, HNSW on disk). `vs_minilm` puts **the same vectors** in Vector Search, so any gap is the **engine**. `vs_gte` swaps in Databricks-managed `gte-large-en`, so the gap from `vs_minilm` is the **embedding model**. Scored by `src/lib/ir_metrics.py`; video ids carry the verdict because chunk ids churn on every local re-index."
               ]
-            }
-          },
-          "position": { "x": 0, "y": 1, "width": 6, "height": 2 }
+            },
+            "name": "subtitle"
+          }
         },
         {
+          "position": {
+            "height": 3,
+            "width": 2,
+            "x": 0,
+            "y": 3
+          },
           "widget": {
             "name": "score-chroma",
             "queries": [
@@ -97,33 +122,53 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "ds_summary",
-                  "fields": [{ "name": "ndcg_at_10", "expression": "`ndcg_at_10`" }],
-                  "filters": [{ "expression": "`contender` = 'chroma'" }],
-                  "disaggregated": true
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`ndcg_at_10`",
+                      "name": "ndcg_at_10"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`contender` = 'chroma'"
+                    }
+                  ]
                 }
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "ndcg_at_10",
                   "displayName": "NDCG@10",
-                  "format": { "type": "number", "decimalPlaces": { "type": "exact", "places": 3 } }
+                  "fieldName": "ndcg_at_10",
+                  "format": {
+                    "decimalPlaces": {
+                      "places": 3,
+                      "type": "exact"
+                    },
+                    "type": "number"
+                  }
                 }
               },
               "frame": {
-                "showTitle": true,
-                "title": "chroma (baseline)",
+                "description": "transcript-lab's local index \u2014 MiniLM + HNSW",
                 "showDescription": true,
-                "description": "transcript-lab's local index — MiniLM + HNSW"
-              }
+                "showTitle": true,
+                "title": "chroma (baseline)"
+              },
+              "version": 2,
+              "widgetType": "counter"
             }
-          },
-          "position": { "x": 0, "y": 3, "width": 2, "height": 3 }
+          }
         },
         {
+          "position": {
+            "height": 3,
+            "width": 2,
+            "x": 2,
+            "y": 3
+          },
           "widget": {
             "name": "score-vs-minilm",
             "queries": [
@@ -131,33 +176,53 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "ds_summary",
-                  "fields": [{ "name": "ndcg_at_10", "expression": "`ndcg_at_10`" }],
-                  "filters": [{ "expression": "`contender` = 'vs_minilm'" }],
-                  "disaggregated": true
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`ndcg_at_10`",
+                      "name": "ndcg_at_10"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`contender` = 'vs_minilm'"
+                    }
+                  ]
                 }
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "ndcg_at_10",
                   "displayName": "NDCG@10",
-                  "format": { "type": "number", "decimalPlaces": { "type": "exact", "places": 3 } }
+                  "fieldName": "ndcg_at_10",
+                  "format": {
+                    "decimalPlaces": {
+                      "places": 3,
+                      "type": "exact"
+                    },
+                    "type": "number"
+                  }
                 }
               },
               "frame": {
-                "showTitle": true,
-                "title": "vs_minilm (parity control)",
+                "description": "Same vectors, Databricks engine \u2014 should match the baseline",
                 "showDescription": true,
-                "description": "Same vectors, Databricks engine — should match the baseline"
-              }
+                "showTitle": true,
+                "title": "vs_minilm (parity control)"
+              },
+              "version": 2,
+              "widgetType": "counter"
             }
-          },
-          "position": { "x": 2, "y": 3, "width": 2, "height": 3 }
+          }
         },
         {
+          "position": {
+            "height": 3,
+            "width": 2,
+            "x": 4,
+            "y": 3
+          },
           "widget": {
             "name": "score-vs-gte",
             "queries": [
@@ -165,33 +230,53 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "ds_summary",
-                  "fields": [{ "name": "ndcg_at_10", "expression": "`ndcg_at_10`" }],
-                  "filters": [{ "expression": "`contender` = 'vs_gte'" }],
-                  "disaggregated": true
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`ndcg_at_10`",
+                      "name": "ndcg_at_10"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`contender` = 'vs_gte'"
+                    }
+                  ]
                 }
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "ndcg_at_10",
                   "displayName": "NDCG@10",
-                  "format": { "type": "number", "decimalPlaces": { "type": "exact", "places": 3 } }
+                  "fieldName": "ndcg_at_10",
+                  "format": {
+                    "decimalPlaces": {
+                      "places": 3,
+                      "type": "exact"
+                    },
+                    "type": "number"
+                  }
                 }
               },
               "frame": {
-                "showTitle": true,
-                "title": "vs_gte (the agent's index)",
+                "description": "Databricks-managed gte-large-en, 1024-dim",
                 "showDescription": true,
-                "description": "Databricks-managed gte-large-en, 1024-dim"
-              }
+                "showTitle": true,
+                "title": "vs_gte (the agent's index)"
+              },
+              "version": 2,
+              "widgetType": "counter"
             }
-          },
-          "position": { "x": 4, "y": 3, "width": 2, "height": 3 }
+          }
         },
         {
+          "position": {
+            "height": 6,
+            "width": 4,
+            "x": 0,
+            "y": 6
+          },
           "widget": {
             "name": "metric-bars",
             "queries": [
@@ -199,38 +284,69 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "ds_metric_long",
+                  "disaggregated": true,
                   "fields": [
-                    { "name": "metric", "expression": "`metric`" },
-                    { "name": "contender", "expression": "`contender`" },
-                    { "name": "score", "expression": "`score`" }
-                  ],
-                  "disaggregated": true
+                    {
+                      "expression": "`contender`",
+                      "name": "contender"
+                    },
+                    {
+                      "expression": "`metric`",
+                      "name": "metric"
+                    },
+                    {
+                      "expression": "`score`",
+                      "name": "score"
+                    }
+                  ]
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
+              "data": {
+                "queryName": "main_query"
+              },
               "encodings": {
-                "x": { "fieldName": "metric", "scale": { "type": "categorical" }, "displayName": "Metric" },
-                "y": { "fieldName": "score", "scale": { "type": "quantitative" }, "displayName": "Score" },
                 "color": {
+                  "displayName": "Contender",
                   "fieldName": "contender",
-                  "scale": { "type": "categorical" },
-                  "displayName": "Contender"
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "x": {
+                  "displayName": "Metric",
+                  "fieldName": "metric",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "displayName": "Score",
+                  "fieldName": "score",
+                  "scale": {
+                    "type": "quantitative"
+                  }
                 }
               },
               "frame": {
-                "showTitle": true,
-                "title": "All three metrics, side by side",
+                "description": "chroma and vs_minilm matching is the control working; vs_gte diverging is the embedding model",
                 "showDescription": true,
-                "description": "chroma and vs_minilm matching is the control working; vs_gte diverging is the embedding model"
-              }
+                "showTitle": true,
+                "title": "All three metrics, side by side"
+              },
+              "version": 3,
+              "widgetType": "bar"
             }
-          },
-          "position": { "x": 0, "y": 6, "width": 4, "height": 6 }
+          }
         },
         {
+          "position": {
+            "height": 6,
+            "width": 2,
+            "x": 4,
+            "y": 6
+          },
           "widget": {
             "name": "latency",
             "queries": [
@@ -238,32 +354,55 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "ds_summary",
+                  "disaggregated": true,
                   "fields": [
-                    { "name": "contender", "expression": "`contender`" },
-                    { "name": "latency_s", "expression": "`latency_s`" }
-                  ],
-                  "disaggregated": true
+                    {
+                      "expression": "`contender`",
+                      "name": "contender"
+                    },
+                    {
+                      "expression": "`latency_s`",
+                      "name": "latency_s"
+                    }
+                  ]
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
               "encodings": {
-                "x": { "fieldName": "latency_s", "scale": { "type": "quantitative" }, "displayName": "Seconds" },
-                "y": { "fieldName": "contender", "scale": { "type": "categorical" }, "displayName": "Contender" }
+                "x": {
+                  "displayName": "Seconds",
+                  "fieldName": "latency_s",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "displayName": "Contender",
+                  "fieldName": "contender",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
               },
               "frame": {
-                "showTitle": true,
-                "title": "Query latency",
+                "description": "Local disk beats a network hop; gte also pays an embedding call",
                 "showDescription": true,
-                "description": "Local disk beats a network hop; gte also pays an embedding call"
-              }
+                "showTitle": true,
+                "title": "Query latency"
+              },
+              "version": 3,
+              "widgetType": "bar"
             }
-          },
-          "position": { "x": 4, "y": 6, "width": 2, "height": 6 }
+          }
         },
         {
+          "position": {
+            "height": 6,
+            "width": 6,
+            "x": 0,
+            "y": 12
+          },
           "widget": {
             "name": "domain-bars",
             "queries": [
@@ -271,38 +410,66 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "ds_domain",
+                  "disaggregated": true,
                   "fields": [
-                    { "name": "domain", "expression": "`domain`" },
-                    { "name": "contender", "expression": "`contender`" },
-                    { "name": "recall_at_10", "expression": "`recall_at_10`" }
-                  ],
-                  "disaggregated": true
+                    {
+                      "expression": "`domain`",
+                      "name": "domain"
+                    },
+                    {
+                      "expression": "`contender`",
+                      "name": "contender"
+                    },
+                    {
+                      "expression": "`recall_at_10`",
+                      "name": "recall_at_10"
+                    }
+                  ]
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
               "encodings": {
-                "x": { "fieldName": "domain", "scale": { "type": "categorical" }, "displayName": "Domain" },
-                "y": { "fieldName": "recall_at_10", "scale": { "type": "quantitative" }, "displayName": "recall@10" },
                 "color": {
+                  "displayName": "Contender",
                   "fieldName": "contender",
-                  "scale": { "type": "categorical" },
-                  "displayName": "Contender"
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "x": {
+                  "displayName": "Domain",
+                  "fieldName": "domain",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "displayName": "recall@10",
+                  "fieldName": "recall_at_10",
+                  "scale": {
+                    "type": "quantitative"
+                  }
                 }
               },
               "frame": {
-                "showTitle": true,
-                "title": "Recall by question domain",
+                "description": "Where each retriever earns or loses its average",
                 "showDescription": true,
-                "description": "Where each retriever earns or loses its average"
-              }
+                "showTitle": true,
+                "title": "Recall by question domain"
+              },
+              "version": 3,
+              "widgetType": "bar"
             }
-          },
-          "position": { "x": 0, "y": 12, "width": 6, "height": 6 }
+          }
         },
         {
+          "position": {
+            "height": 8,
+            "width": 6,
+            "x": 0,
+            "y": 18
+          },
           "widget": {
             "name": "detail",
             "queries": [
@@ -310,84 +477,735 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "ds_detail",
+                  "disaggregated": true,
                   "fields": [
-                    { "name": "case_id", "expression": "`case_id`" },
-                    { "name": "domain", "expression": "`domain`" },
-                    { "name": "question_type", "expression": "`question_type`" },
-                    { "name": "contender", "expression": "`contender`" },
-                    { "name": "video_recall", "expression": "`video_recall`" },
-                    { "name": "video_mrr", "expression": "`video_mrr`" },
-                    { "name": "video_ndcg", "expression": "`video_ndcg`" },
-                    { "name": "latency_s", "expression": "`latency_s`" },
-                    { "name": "retrieved_videos", "expression": "`retrieved_videos`" }
-                  ],
-                  "disaggregated": true
+                    {
+                      "expression": "`case_id`",
+                      "name": "case_id"
+                    },
+                    {
+                      "expression": "`domain`",
+                      "name": "domain"
+                    },
+                    {
+                      "expression": "`question_type`",
+                      "name": "question_type"
+                    },
+                    {
+                      "expression": "`contender`",
+                      "name": "contender"
+                    },
+                    {
+                      "expression": "`video_recall`",
+                      "name": "video_recall"
+                    },
+                    {
+                      "expression": "`video_mrr`",
+                      "name": "video_mrr"
+                    },
+                    {
+                      "expression": "`video_ndcg`",
+                      "name": "video_ndcg"
+                    },
+                    {
+                      "expression": "`latency_s`",
+                      "name": "latency_s"
+                    },
+                    {
+                      "expression": "`retrieved_videos`",
+                      "name": "retrieved_videos"
+                    }
+                  ]
                 }
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "table",
+              "allowHTMLByDefault": false,
               "encodings": {
                 "columns": [
-                  { "fieldName": "case_id", "displayName": "Case", "booleanValues": ["false", "true"], "type": "string" },
-                  { "fieldName": "domain", "displayName": "Domain", "booleanValues": ["false", "true"], "type": "string" },
-                  { "fieldName": "question_type", "displayName": "Type", "booleanValues": ["false", "true"], "type": "string" },
-                  { "fieldName": "contender", "displayName": "Contender", "booleanValues": ["false", "true"], "type": "string" },
                   {
-                    "fieldName": "video_recall",
-                    "displayName": "recall@10",
-                    "type": "float",
-                    "numberFormat": "0.00",
-                    "cellFormat": {
-                      "default": { "foregroundColor": null },
-                      "rules": [
-                        { "condition": { "operator": "EQUAL", "operand": { "type": "data-value", "value": "0" } }, "foregroundColor": "#D55E00" },
-                        { "condition": { "operator": "EQUAL", "operand": { "type": "data-value", "value": "1" } }, "foregroundColor": "#009E73" }
-                      ]
-                    }
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "Case",
+                    "fieldName": "case_id",
+                    "type": "string"
                   },
-                  { "fieldName": "video_mrr", "displayName": "MRR", "type": "float", "numberFormat": "0.00" },
-                  { "fieldName": "video_ndcg", "displayName": "NDCG@10", "type": "float", "numberFormat": "0.00" },
-                  { "fieldName": "latency_s", "displayName": "Latency (s)", "type": "float", "numberFormat": "0.00" },
-                  { "fieldName": "retrieved_videos", "displayName": "Retrieved video ids", "booleanValues": ["false", "true"], "type": "string" }
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "Domain",
+                    "fieldName": "domain",
+                    "type": "string"
+                  },
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "Type",
+                    "fieldName": "question_type",
+                    "type": "string"
+                  },
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "Contender",
+                    "fieldName": "contender",
+                    "type": "string"
+                  },
+                  {
+                    "cellFormat": {
+                      "default": {
+                        "foregroundColor": null
+                      },
+                      "rules": [
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "0"
+                            },
+                            "operator": "EQUAL"
+                          },
+                          "foregroundColor": "#D55E00"
+                        },
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "1"
+                            },
+                            "operator": "EQUAL"
+                          },
+                          "foregroundColor": "#009E73"
+                        }
+                      ]
+                    },
+                    "displayName": "recall@10",
+                    "fieldName": "video_recall",
+                    "numberFormat": "0.00",
+                    "type": "float"
+                  },
+                  {
+                    "displayName": "MRR",
+                    "fieldName": "video_mrr",
+                    "numberFormat": "0.00",
+                    "type": "float"
+                  },
+                  {
+                    "displayName": "NDCG@10",
+                    "fieldName": "video_ndcg",
+                    "numberFormat": "0.00",
+                    "type": "float"
+                  },
+                  {
+                    "displayName": "Latency (s)",
+                    "fieldName": "latency_s",
+                    "numberFormat": "0.00",
+                    "type": "float"
+                  },
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "Retrieved video ids",
+                    "fieldName": "retrieved_videos",
+                    "type": "string"
+                  }
                 ]
               },
-              "invisibleColumns": [],
-              "allowHTMLByDefault": false,
-              "itemsPerPage": 25,
               "frame": {
-                "showTitle": true,
-                "title": "Every question, every contender",
+                "description": "Green recall = every expected video found; red = none",
                 "showDescription": true,
-                "description": "Green recall = every expected video found; red = none"
-              }
+                "showTitle": true,
+                "title": "Every question, every contender"
+              },
+              "invisibleColumns": [],
+              "itemsPerPage": 25,
+              "version": 2,
+              "widgetType": "table"
             }
-          },
-          "position": { "x": 0, "y": 18, "width": 6, "height": 8 }
+          }
         },
         {
+          "position": {
+            "height": 2,
+            "width": 6,
+            "x": 0,
+            "y": 26
+          },
           "widget": {
-            "name": "anchors-note",
             "multilineTextboxSpec": {
               "lines": [
                 "**On the golden set's chunk anchors.** It was verified against a 23-video / 488-chunk corpus; the corpus is now 107 videos / 2,966 chunks, and transcript-lab recreates chunk ids on every re-index. So `expected_video_ids` decides the verdict here, while `expected_chunk_ids` are re-anchored by content hash and reported per case (`chunk_anchors_resolved` / `_unresolved`) rather than being scored as silent misses. Re-confirming the unresolved anchors is the next piece of work."
               ]
-            }
-          },
-          "position": { "x": 0, "y": 26, "width": 6, "height": 2 }
+            },
+            "name": "anchors-note"
+          }
         }
-      ]
+      ],
+      "name": "page_verdict",
+      "pageType": "PAGE_TYPE_CANVAS"
+    },
+    {
+      "displayName": "Judge scores",
+      "layout": [
+        {
+          "position": {
+            "height": 1,
+            "width": 6,
+            "x": 0,
+            "y": 0
+          },
+          "widget": {
+            "multilineTextboxSpec": {
+              "lines": [
+                "# LLM-as-judge \u2014 agent variants vs the dev golden bar"
+              ]
+            },
+            "name": "judge-title"
+          }
+        },
+        {
+          "position": {
+            "height": 2,
+            "width": 6,
+            "x": 0,
+            "y": 1
+          },
+          "widget": {
+            "multilineTextboxSpec": {
+              "lines": [
+                "Every variant's answers scored by transcript-lab's own RAGAS + depth judge ",
+                "(`depth-v2` composite, judge context budget 16). `dev_golden` is the bar: the dev ",
+                "workbench's agentic answers through the same judge. Hops = real retrieval calls."
+              ]
+            },
+            "name": "judge-subtitle"
+          }
+        },
+        {
+          "position": {
+            "height": 3,
+            "width": 2,
+            "x": 0,
+            "y": 3
+          },
+          "widget": {
+            "name": "judge-golden-broad",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_judge_summary",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "avg(`composite`)",
+                      "name": "composite"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`variant` = 'dev_golden'"
+                    },
+                    {
+                      "expression": "`category` = 'broad'"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "value": {
+                  "displayName": "golden broad composite",
+                  "fieldName": "composite",
+                  "format": {
+                    "decimalPlaces": {
+                      "places": 3,
+                      "type": "exact"
+                    },
+                    "type": "number"
+                  }
+                }
+              },
+              "frame": {
+                "description": "the bar to meet (dev agentic, broad questions)",
+                "showDescription": true,
+                "showTitle": true,
+                "title": "golden broad composite"
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 3,
+            "width": 2,
+            "x": 2,
+            "y": 3
+          },
+          "widget": {
+            "name": "judge-best-broad",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_judge_summary",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "max(`composite`)",
+                      "name": "composite"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`variant` <> 'dev_golden'"
+                    },
+                    {
+                      "expression": "`category` = 'broad'"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "value": {
+                  "displayName": "best variant broad",
+                  "fieldName": "composite",
+                  "format": {
+                    "decimalPlaces": {
+                      "places": 3,
+                      "type": "exact"
+                    },
+                    "type": "number"
+                  }
+                }
+              },
+              "frame": {
+                "description": "latest runs; compare against the golden bar",
+                "showDescription": true,
+                "showTitle": true,
+                "title": "best variant broad"
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 3,
+            "width": 2,
+            "x": 4,
+            "y": 3
+          },
+          "widget": {
+            "name": "judge-best-hops",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_judge_summary",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "max(`hops`)",
+                      "name": "hops"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`variant` <> 'dev_golden'"
+                    },
+                    {
+                      "expression": "`category` = 'broad'"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "value": {
+                  "displayName": "broad hops (best variant)",
+                  "fieldName": "hops",
+                  "format": {
+                    "decimalPlaces": {
+                      "places": 3,
+                      "type": "exact"
+                    },
+                    "type": "number"
+                  }
+                }
+              },
+              "frame": {
+                "description": "gate: >= 3 mean hops on broad questions",
+                "showDescription": true,
+                "showTitle": true,
+                "title": "broad hops (best variant)"
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 7,
+            "width": 3,
+            "x": 0,
+            "y": 6
+          },
+          "widget": {
+            "name": "judge-composite-bar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_judge_summary",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`variant`",
+                      "name": "variant"
+                    },
+                    {
+                      "expression": "`composite`",
+                      "name": "composite"
+                    },
+                    {
+                      "expression": "`category`",
+                      "name": "category"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "x": {
+                  "displayName": "variant",
+                  "fieldName": "variant",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "displayName": "composite",
+                  "fieldName": "composite",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "displayName": "category",
+                  "fieldName": "category",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "description": "grouped by stratum; dev_golden is the target",
+                "showDescription": true,
+                "showTitle": true,
+                "title": "depth-v2 composite by variant"
+              },
+              "version": 3,
+              "widgetType": "bar"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 7,
+            "width": 3,
+            "x": 3,
+            "y": 6
+          },
+          "widget": {
+            "name": "judge-hops-bar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_judge_summary",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`variant`",
+                      "name": "variant"
+                    },
+                    {
+                      "expression": "`hops`",
+                      "name": "hops"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`category` = 'broad'"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "x": {
+                  "displayName": "variant",
+                  "fieldName": "variant",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "displayName": "hops",
+                  "fieldName": "hops",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "description": "single-hop baselines vs research-protocol variants",
+                "showDescription": true,
+                "showTitle": true,
+                "title": "mean hops by variant (broad)"
+              },
+              "version": 3,
+              "widgetType": "bar"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 7,
+            "width": 6,
+            "x": 0,
+            "y": 13
+          },
+          "widget": {
+            "name": "judge-detail",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_judge",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`variant`",
+                      "name": "variant"
+                    },
+                    {
+                      "expression": "`question_id`",
+                      "name": "question_id"
+                    },
+                    {
+                      "expression": "`category`",
+                      "name": "category"
+                    },
+                    {
+                      "expression": "`hops`",
+                      "name": "hops"
+                    },
+                    {
+                      "expression": "`unique_videos`",
+                      "name": "unique_videos"
+                    },
+                    {
+                      "expression": "`faithfulness`",
+                      "name": "faithfulness"
+                    },
+                    {
+                      "expression": "`coverage`",
+                      "name": "coverage"
+                    },
+                    {
+                      "expression": "`evidence_breadth`",
+                      "name": "evidence_breadth"
+                    },
+                    {
+                      "expression": "`composite`",
+                      "name": "composite"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "allowHTMLByDefault": false,
+              "encodings": {
+                "columns": [
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "variant",
+                    "fieldName": "variant",
+                    "type": "string",
+                    "title": "variant",
+                    "order": 100000
+                  },
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "question_id",
+                    "fieldName": "question_id",
+                    "type": "string",
+                    "title": "question_id",
+                    "order": 100001
+                  },
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "category",
+                    "fieldName": "category",
+                    "type": "string",
+                    "title": "category",
+                    "order": 100002
+                  },
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "hops",
+                    "fieldName": "hops",
+                    "type": "string",
+                    "title": "hops",
+                    "order": 100003
+                  },
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "unique_videos",
+                    "fieldName": "unique_videos",
+                    "type": "string",
+                    "title": "unique_videos",
+                    "order": 100004
+                  },
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "faithfulness",
+                    "fieldName": "faithfulness",
+                    "type": "string",
+                    "title": "faithfulness",
+                    "order": 100005
+                  },
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "coverage",
+                    "fieldName": "coverage",
+                    "type": "string",
+                    "title": "coverage",
+                    "order": 100006
+                  },
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "evidence_breadth",
+                    "fieldName": "evidence_breadth",
+                    "type": "string",
+                    "title": "evidence_breadth",
+                    "order": 100007
+                  },
+                  {
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayName": "composite",
+                    "fieldName": "composite",
+                    "type": "string",
+                    "title": "composite",
+                    "order": 100008
+                  }
+                ]
+              },
+              "frame": {
+                "description": "latest run per variant, plus the dev goldens as the bar",
+                "showDescription": true,
+                "showTitle": true,
+                "title": "Per-question detail"
+              },
+              "invisibleColumns": [],
+              "itemsPerPage": 25,
+              "version": 2,
+              "widgetType": "table"
+            }
+          }
+        }
+      ],
+      "name": "page_judge",
+      "pageType": "PAGE_TYPE_CANVAS"
     }
   ],
   "uiSettings": {
     "theme": {
-      "canvasBackgroundColor": { "light": "#FCFCFC", "dark": "#1F272D" },
-      "widgetBackgroundColor": { "light": "#FFFFFF", "dark": "#11171C" },
-      "widgetBorderColor": { "light": "#FFFFFF", "dark": "#11171C" },
-      "fontColor": { "light": "#11171C", "dark": "#E8ECF0" },
-      "selectionColor": { "light": "#2272B4", "dark": "#8ACAFF" },
-      "visualizationColors": ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#D55E00", "#56B4E9", "#F0E442"],
+      "canvasBackgroundColor": {
+        "dark": "#1F272D",
+        "light": "#FCFCFC"
+      },
+      "fontColor": {
+        "dark": "#E8ECF0",
+        "light": "#11171C"
+      },
+      "selectionColor": {
+        "dark": "#8ACAFF",
+        "light": "#2272B4"
+      },
+      "visualizationColors": [
+        "#0072B2",
+        "#E69F00",
+        "#009E73",
+        "#CC79A7",
+        "#D55E00",
+        "#56B4E9",
+        "#F0E442"
+      ],
+      "widgetBackgroundColor": {
+        "dark": "#11171C",
+        "light": "#FFFFFF"
+      },
+      "widgetBorderColor": {
+        "dark": "#11171C",
+        "light": "#FFFFFF"
+      },
       "widgetHeaderAlignment": "LEFT"
     }
   }

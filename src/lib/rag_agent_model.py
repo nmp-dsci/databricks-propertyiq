@@ -23,7 +23,7 @@ import mlflow
 from mlflow.pyfunc import ChatAgent
 from mlflow.types.agent import ChatAgentMessage, ChatAgentResponse
 
-from lib.rag_agent import DEFAULT_MODE, MODES, ask, make_databricks_agent
+from lib.rag_agent import DEFAULT_MODE, DEFAULT_PROTOCOL, MODES, ask, make_databricks_agent
 
 
 class RagTranscriptAgent(ChatAgent):
@@ -34,13 +34,14 @@ class RagTranscriptAgent(ChatAgent):
         if mode not in self._agents:
             self._agents[mode] = make_databricks_agent(
                 index_name=os.environ.get("RAG_INDEX_NAME", "workspace.rag.rag_chunks_gte"),
-                model_endpoint=os.environ.get(
-                    "RAG_LLM_ENDPOINT", "databricks-meta-llama-3-3-70b-instruct"
-                ),
+                model_endpoint=os.environ.get("RAG_LLM_ENDPOINT", "databricks-qwen35-122b-a10b"),
                 embedding_endpoint=os.environ.get(
                     "RAG_EMBEDDING_ENDPOINT", "databricks-gte-large-en"
                 ),
                 mode=mode,
+                # The s09 winner rides DEFAULT_PROTOCOL; the env var exists so a
+                # deployed endpoint can be flipped back without re-registering.
+                protocol=os.environ.get("RAG_PROTOCOL", DEFAULT_PROTOCOL),
             )
         return self._agents[mode]
 

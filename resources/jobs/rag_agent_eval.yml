@@ -1,0 +1,45 @@
+# The in-workspace LLM-as-judge loop for the deployed RAG agent (s09
+# close-out): ask the live serving endpoint every golden question, judge the
+# answers with an FMAPI model through ai_query, append to judge_scores.
+#
+# On demand, no schedule — evaluation is an *opportunity* here (run it after a
+# redeploy, a prompt change, or a corpus refresh), and every run is one more
+# append to the same tables the rag_eval dashboard's Judge page reads:
+#   databricks bundle run rag_agent_eval -t dev
+#
+# Everything the job touches lives inside the workspace: the endpoint, the
+# golden table, ai_query's judge model, the results tables. That boundary is
+# the design — Free Edition serverless has no egress and no runtime pip, so
+# the one piece that cannot run here (the sibling project's DeepSeek/ragas
+# parity judge, used to CAPTURE the goldens) stays a laptop step by
+# necessity, not preference.
+resources:
+  jobs:
+    rag_agent_eval:
+      name: propertyiq-rag-agent-eval
+      max_concurrent_runs: 1
+
+      # No compute config = serverless, the only option on Free Edition.
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.rag_schema}
+        - name: endpoint
+          default: agents_workspace-rag-rag_transcript_agent
+        - name: mode
+          default: agentic
+        - name: variant
+          default: live-react
+        - name: protocol
+          default: react
+        - name: judge_endpoint
+          default: databricks-gpt-oss-120b
+
+      tasks:
+        - task_key: eval_and_judge
+          notebook_task:
+            notebook_path: ../../src/notebooks/rag/05_agent_eval.py
+
+      queue:
+        enabled: true

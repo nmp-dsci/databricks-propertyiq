@@ -13,9 +13,11 @@ import json
 import pandas as pd
 
 from lib.rag_export import (
+    ENTITY_KEYS,
     chunk_rows,
     eval_run_rows,
     frame_sha,
+    golden_answer_rows,
     golden_rows,
     graph_rows,
     landing_name,
@@ -268,3 +270,79 @@ def test_parse_landed_rejects_off_contract_names():
     assert parse_landed("chunks.parquet") is None
     assert parse_landed("chunks_short.parquet") is None
     assert parse_landed("chunks_82f5daf4.csv") is None
+
+
+# ---------------------------------------------------------------------------
+# golden_answers (s09) — judged dev answers as the optimisation target
+# ---------------------------------------------------------------------------
+
+GOLDEN_ANSWER_RECORD = {
+    "question_id": "b01",
+    "category": "broad",
+    "domain": "databricks",
+    "question": "Guide me on Databricks for an SA interview?",
+    "source_case_id": None,
+    "answer": "## Key Findings\n1. Know the lakehouse. [1]",
+    "answer_model": "deepseek-v4-flash",
+    "contexts": ["chunk text one", "chunk text two"],
+    "references": [{"label": 1, "video_id": "v1"}],
+    "chunk_ids": ["c1", "c2"],
+    "queries": ["databricks lakehouse", "unity catalog"],
+    "iterations": 7,
+    "llm_calls": 8,
+    "terminated_reason": "completed",
+    "captured_at": "2026-08-20T04:00:00+00:00",
+    "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9,
+        "context_precision": 0.8,
+        "insight_depth": 0.7,
+        "specificity": 0.6,
+        "coverage": 0.5,
+        "evidence_breadth": 0.4,
+        "calibration": 0.3,
+    },
+    "ragas_v1_composite": 0.9,
+    "composite": 0.61,
+    "cap_applied": False,
+    "grounding_floor_breached": False,
+    "judge_model": "deepseek-v4-flash",
+    "rubric_version": "depth-v2",
+    "judge_error": None,
+}
+
+
+def test_golden_answer_rows_flatten_scores_and_json_encode_lists():
+    frame = golden_answer_rows([GOLDEN_ANSWER_RECORD])
+    row = frame.iloc[0]
+    assert row["question_id"] == "b01"
+    assert row["composite"] == 0.61
+    assert row["evidence_breadth"] == 0.4
+    assert row["iterations"] == 7
+    assert json.loads(row["contexts_json"]) == ["chunk text one", "chunk text two"]
+    assert json.loads(row["queries_json"]) == ["databricks lakehouse", "unity catalog"]
+    assert row["source"] == "transcript-lab/rag_agent"
+    assert row["judge_error"] == ""
+
+
+def test_golden_answer_rows_tolerate_an_unjudged_record():
+    unjudged = {
+        "question_id": "n01",
+        "category": "narrow",
+        "domain": "property",
+        "question": "q",
+        "answer": "a",
+        "judge_error": "no retrieval contexts; not judged",
+    }
+    frame = golden_answer_rows([unjudged])
+    row = frame.iloc[0]
+    assert pd.isna(row["composite"])
+    assert pd.isna(row["faithfulness"])
+    assert row["cap_applied"] is False or row["cap_applied"] == False  # noqa: E712 — numpy bool
+    assert row["judge_error"] == "no retrieval contexts; not judged"
+
+
+def test_golden_answers_entity_registered_with_question_id_key():
+    assert ENTITY_KEYS["golden_answers"] == ("question_id",)
+    frame = golden_answer_rows([GOLDEN_ANSWER_RECORD])
+    assert frame_sha(frame, ENTITY_KEYS["golden_answers"]) != "empty000"

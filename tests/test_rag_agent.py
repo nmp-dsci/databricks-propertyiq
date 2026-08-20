@@ -138,7 +138,9 @@ def test_agentic_mode_loops_until_the_model_says_it_has_enough():
         ]
     )
     retriever = ScriptedRetriever([[chunk("v1:0")], [chunk("v2:0")]])
-    result = ask(build_agent(llm, retriever, mode="agentic"), "How does UC track lineage?")
+    result = ask(
+        build_agent(llm, retriever, mode="agentic", protocol="v1"), "How does UC track lineage?"
+    )
 
     # One seed retrieval, then one model-chosen follow-up.
     assert retriever.queries == ["How does UC track lineage?", "unity catalog lineage"]
@@ -150,7 +152,7 @@ def test_agentic_mode_stops_at_the_hop_cap():
     # Always asks for another search; the cap is what ends it.
     llm = ScriptedLLM(['{"action": "search", "query": "more"}'] * 10 + ["answer"])
     retriever = ScriptedRetriever()
-    result = ask(build_agent(llm, retriever, mode="agentic"), "unanswerable")
+    result = ask(build_agent(llm, retriever, mode="agentic", protocol="v1"), "unanswerable")
 
     assert len(retriever.queries) == 1 + 3  # seed + MAX_HOPS
     assert any("hop cap" in line for line in result["decision_log"])
@@ -159,7 +161,7 @@ def test_agentic_mode_stops_at_the_hop_cap():
 def test_agentic_mode_answers_when_the_react_step_is_unparseable():
     llm = ScriptedLLM(["I think we should probably search more?", "answer"])
     retriever = ScriptedRetriever()
-    result = ask(build_agent(llm, retriever, mode="agentic"), "a question")
+    result = ask(build_agent(llm, retriever, mode="agentic", protocol="v1"), "a question")
 
     assert len(retriever.queries) == 1  # seed only — no runaway loop
     assert result["answer"] == "answer"
