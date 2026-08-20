@@ -159,6 +159,8 @@ def judge_rows(rows: list[dict], source: Path, answer_model: str, variant_label:
             str(request_path),
             "--output",
             str(scored_path),
+            "--workers",
+            "6",
         ],
         check=False,
     )
