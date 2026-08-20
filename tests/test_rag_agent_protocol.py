@@ -201,3 +201,78 @@ def test_v3_budget_is_six_searches():
     agent = build_agent(ScriptedLLM(replies), ScriptedRetriever(), mode="agentic", protocol="v3")
     result = ask(agent, "q")
     assert any("hop cap (6)" in line for line in result["decision_log"])
+
+
+# ---------------------------------------------------------------------------
+# protocol v4 — decompose-first: the fan-out IS the research floor
+# ---------------------------------------------------------------------------
+
+
+def test_v4_broad_question_fans_out_then_decides():
+    llm = ScriptedLLM(
+        [
+            "databricks lakehouse basics\nunity catalog governance\nsa interview process",
+            search_reply("delta live tables"),
+            json.dumps({"action": "answer"}),
+            "## Key Findings\n1. ... [Video v1 @ 01:05]",
+        ]
+    )
+    retriever = ScriptedRetriever(
+        [[chunk("v1:0")], [chunk("v2:0")], [chunk("v3:0")], [chunk("v4:0")]]
+    )
+    agent = build_agent(llm, retriever, mode="agentic", protocol="v4")
+    result = ask(agent, "Guide me on Databricks for an SA interview")
+
+    # 3 fan-out retrievals + 1 decide-loop hop = 4, all distinct queries
+    assert retriever.queries == [
+        "databricks lakehouse basics",
+        "unity catalog governance",
+        "sa interview process",
+        "delta live tables",
+    ]
+    assert len(result["chunk_keys"]) == 4
+    # Researched answer keeps the structured contract
+    assert "## Key Findings" in llm.calls[-1][1]["content"]
+
+
+def test_v4_narrow_passthrough_matches_a0_shape():
+    llm = ScriptedLLM(
+        [
+            "How do I set up Herder, and what app do I run it in?",  # unchanged
+            json.dumps({"action": "answer"}),
+            "plain answer [Video v1 @ 01:05]",
+        ]
+    )
+    retriever = ScriptedRetriever([[chunk("v1:0")]])
+    agent = build_agent(llm, retriever, mode="agentic", protocol="v4")
+    ask(agent, "How do I set up Herder, and what app do I run it in?")
+
+    # One retrieval with the raw question — the evidence A0 was measured on —
+    # and the plain answer contract, no Key Findings padding.
+    assert retriever.queries == ["How do I set up Herder, and what app do I run it in?"]
+    assert "## Key Findings" not in llm.calls[-1][1]["content"]
+
+
+def test_v4_fanout_counts_against_the_hop_budget():
+    llm = ScriptedLLM(
+        ["q1\nq2\nq3"] + [search_reply(f"extra {i}") for i in range(9)] + ["answer [v]"]
+    )
+    agent = build_agent(llm, ScriptedRetriever(), mode="agentic", protocol="v4")
+    result = ask(agent, "broad question")
+    # budget 6: 3 fan-out + 3 decide-loop searches, then the cap
+    assert any("hop cap (6)" in line for line in result["decision_log"])
+
+
+def test_v4_decide_loop_never_repeats_a_fanout_query():
+    llm = ScriptedLLM(
+        [
+            "q1\nq2",
+            search_reply("q1"),  # repeat of a fan-out query — blocked
+            "answer [Video v1 @ 01:05]",
+        ]
+    )
+    retriever = ScriptedRetriever()
+    agent = build_agent(llm, retriever, mode="agentic", protocol="v4")
+    result = ask(agent, "question")
+    assert retriever.queries == ["q1", "q2"]
+    assert any("repeated query" in line for line in result["decision_log"])

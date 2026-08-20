@@ -54,9 +54,19 @@ MAX_HOPS = 3
 # (1.3). Dev's loop never had a seed; its model must search to see anything.
 # v3 makes decide drive the first retrieval too, and adds a stop rule so the
 # budget is spent on gaps, not spirals.
-PROTOCOLS = ("v1", "v2", "v3")
+#
+# v4 is the matrix's synthesis: decompose-first agentic. The model's own
+# decomposition (multi's tested node) buys the research floor mechanically —
+# a broad question fans out into up-to-3 sub-queries, one retrieval each,
+# before the v2 decide loop chases what is still missing; a narrow question
+# passes through decompose unchanged, retrieves with the raw question exactly
+# like the measured A0 baseline, and keeps the plain answer contract (the
+# structured Key Findings contract cost narrow questions real composite in
+# both v2 and v3). Dev's protocol steps 2-3 ARE decomposition, so this is the
+# closer port, not a workaround.
+PROTOCOLS = ("v1", "v2", "v3", "v4")
 DEFAULT_PROTOCOL = "v1"
-PROTOCOL_MAX_HOPS = {"v1": MAX_HOPS, "v2": 6, "v3": 6}
+PROTOCOL_MAX_HOPS = {"v1": MAX_HOPS, "v2": 6, "v3": 6, "v4": 6}
 
 SYSTEM = """\
 You answer questions about a corpus of YouTube transcripts covering data
@@ -152,7 +162,7 @@ def build_agent(
     if protocol not in PROTOCOLS:
         raise ValueError(f"unknown protocol {protocol!r}, expected one of {PROTOCOLS}")
     hop_budget = max_hops if max_hops is not None else PROTOCOL_MAX_HOPS[protocol]
-    research = mode == "agentic" and protocol in ("v2", "v3")
+    research = mode == "agentic" and protocol in ("v2", "v3", "v4")
 
     # -- shared nodes ------------------------------------------------------
 
@@ -164,7 +174,10 @@ def build_agent(
                 "decision_log": ["answer: no excerpts retrieved"],
             }
         instruction = "Answer the question from these excerpts, with citations."
-        if research:
+        # v4 narrow passthrough keeps A0's plain contract: Key Findings on a
+        # one-query answer read as padding and cost narrow composite in v2/v3.
+        researched = len(state.get("asked") or []) > 1
+        if research and (protocol != "v4" or researched):
             instruction += "\n" + ANSWER_STRUCTURE_V2
         text = llm(
             [
@@ -218,15 +231,20 @@ def build_agent(
         return {"queries": queries, "decision_log": [f"decompose: {len(queries)} sub-question(s)"]}
 
     def retrieve_each(state: RagState) -> RagState:
+        queries = state.get("queries") or []
         collected: list[dict[str, Any]] = []
-        for query in state.get("queries") or []:
+        for query in queries:
             collected.extend(retrieve(query, TOP_K))
         deduped = dedupe_chunks(collected)
         return {
             "chunks": deduped,
+            # v4's decide loop continues from here: the fan-out counts against
+            # the hop budget and its queries join the no-repeat list.
+            "hops": len(queries),
+            "asked": list(queries),
             "decision_log": [
                 f"retrieve: {len(collected)} excerpts across "
-                f"{len(state.get('queries') or [])} queries, {len(deduped)} after dedupe"
+                f"{len(queries)} queries, {len(deduped)} after dedupe"
             ],
         }
 
@@ -265,7 +283,7 @@ def build_agent(
             + (
                 "5. Once the excerpts fully answer the question, stop and answer — "
                 "searches past that point dilute evidence quality.\n\n"
-                if protocol == "v3"
+                if protocol in ("v3", "v4")
                 else "\n"
             )
             + "Reply with JSON only, on one line:\n"
@@ -350,6 +368,14 @@ def build_agent(
             # No seed: the model sees nothing until it searches, the same
             # structural forcing the dev ReAct loop gets from tool calling.
             graph.set_entry_point("decide")
+        elif protocol == "v4":
+            # Decompose-first: the fan-out is the research floor, then the
+            # decide loop chases remaining gaps.
+            graph.add_node("decompose", decompose)
+            graph.add_node("fanout", retrieve_each)
+            graph.set_entry_point("decompose")
+            graph.add_edge("decompose", "fanout")
+            graph.add_edge("fanout", "decide")
         else:
             graph.add_node("seed", retrieve_once)
             graph.set_entry_point("seed")
