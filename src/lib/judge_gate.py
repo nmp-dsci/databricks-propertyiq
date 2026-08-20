@@ -19,6 +19,7 @@ rule.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 BROAD = "broad"
@@ -35,7 +36,7 @@ def _values(rows: list[dict[str, Any]], field: str, category: str | None = None)
         if category is not None and row.get("category") != category:
             continue
         value = row.get(field)
-        if isinstance(value, (int, float)):
+        if isinstance(value, (int, float)) and not math.isnan(value):
             values.append(float(value))
     return values
 

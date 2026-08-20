@@ -150,10 +150,18 @@ def main() -> None:
     already: dict[str, dict] = {}
     if output_path.exists():
         for line in output_path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
+            if not line.strip():
+                continue
+            try:
                 verdict = json.loads(line)
-                if verdict.get("id") and not verdict.get("error"):
-                    already[str(verdict["id"])] = verdict
+            except json.JSONDecodeError:
+                # A truncated trailing line from a SIGKILL mid-write — the
+                # write it belongs to never completed, so drop it and let the
+                # record be scored fresh rather than aborting the resume.
+                print(f"  skipping truncated output line: {line[:80]!r}", file=sys.stderr)
+                continue
+            if verdict.get("id") and not verdict.get("error"):
+                already[str(verdict["id"])] = verdict
     todo = [record for record in records if str(record.get("id")) not in already]
     print(
         f"judging {len(todo)}/{len(records)} record(s) ({len(already)} already scored), "

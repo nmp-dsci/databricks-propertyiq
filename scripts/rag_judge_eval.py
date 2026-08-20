@@ -30,6 +30,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -255,7 +256,7 @@ def native_evaluate(
         print(f"    {name}: {value}")
 
 
-def log_mlflow(rows: list[dict], config: dict[str, Any]) -> str:
+def log_mlflow(rows: list[dict], config: dict[str, Any], join_run_id: str = "") -> str:
     import mlflow
     from databricks.sdk import WorkspaceClient
 
@@ -264,6 +265,11 @@ def log_mlflow(rows: list[dict], config: dict[str, Any]) -> str:
     mlflow.set_experiment(f"/Users/{user}/{EXPERIMENT}")
     with mlflow.start_run(run_name=f"{config['variant']}-{config['mode']}") as run:
         mlflow.log_params(config)
+        if join_run_id:
+            # Set before the UC insert races ahead of this run's own id: the
+            # UC row's run_id column is this join_run_id, not run.info.run_id,
+            # since the row is written before mlflow.start_run() completes.
+            mlflow.set_tag("judge_scores_run_id", join_run_id)
         for stratum in ("broad", "narrow", None):
             label = stratum or "all"
             summary = aggregate(rows, stratum)
@@ -489,7 +495,15 @@ def finalize(work: Path, source: Path, baseline: str | None) -> None:
     if result.returncode != 0:
         raise SystemExit(f"judge bridge exited {result.returncode}")
     _merge_verdicts(rows, work / "out.jsonl")
-    insert_scores(rows, config, run_id="")
+    marker = work / "uc_inserted.json"
+    if marker.exists():
+        print(f"  UC rows already inserted for this work dir ({marker}) — skipping re-insert")
+    else:
+        join_run_id = uuid.uuid4().hex
+        insert_scores(rows, config, run_id=join_run_id)
+        marker.write_text(json.dumps({"run_id": join_run_id}))
+        with contextlib.suppress(Exception):
+            log_mlflow(rows, config, join_run_id=join_run_id)
 
     from databricks.sdk import WorkspaceClient
 
@@ -584,9 +598,10 @@ def main() -> None:
         )
         rows = run_questions(agent, counter, args.variant, mode, questions=selected)
         config_for_finalize = dict(config)
+        work_dir = None
         if not args.skip_judge:
             print(f"judging {len(rows)} answer(s) with the dev judge ...")
-            judge_rows(
+            work_dir = judge_rows(
                 rows,
                 Path(args.source),
                 answer_model=args.model,
@@ -595,12 +610,19 @@ def main() -> None:
             )
         # UC rows first: the gate and dashboard read them, and the MLflow
         # logging tail has stalled on auth-token churn before — telemetry must
-        # never hold the verdict hostage.
+        # never hold the verdict hostage. join_run_id is generated up front so
+        # the UC row still carries a real, unique id to join against the
+        # MLflow run tagged with the same id below. A marker in the judge work
+        # dir records that the insert happened, so a later `--finalize` on a
+        # kill mid-mlflow-logging doesn't re-insert these rows.
+        join_run_id = uuid.uuid4().hex if not args.skip_mlflow else ""
         if not args.skip_uc and not args.skip_judge:
-            insert_scores(rows, config, run_id="")
+            insert_scores(rows, config, run_id=join_run_id)
+            if work_dir is not None:
+                (work_dir / "uc_inserted.json").write_text(json.dumps({"run_id": join_run_id}))
         if not args.skip_mlflow:
-            run_id = log_mlflow(rows, config)
-            print(f"  mlflow run {run_id}")
+            run_id = log_mlflow(rows, config, join_run_id=join_run_id)
+            print(f"  mlflow run {run_id} (join id {join_run_id})")
         if args.native:
             print("native judge layer (mlflow.genai.evaluate) ...")
             native_evaluate(rows, config, args.judge_model, golden_rows_full(w))

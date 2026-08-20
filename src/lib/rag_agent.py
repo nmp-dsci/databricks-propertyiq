@@ -257,6 +257,8 @@ def build_react_agent(
                 arguments = json.loads(call.get("function", {}).get("arguments") or "{}")
             except ValueError:
                 arguments = {}
+            if not isinstance(arguments, dict):
+                arguments = {}
             query = str(arguments.get("query") or state["question"])
             found = retrieve(query, TOP_K)
             found_all.extend(found)

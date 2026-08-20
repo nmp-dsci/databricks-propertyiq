@@ -277,8 +277,30 @@ FROM {prefix}.silver_golden_answers WHERE is_current GROUP BY category
 """)
 display(golden)
 
-rows = {r["category"]: r for r in summary.collect()}
-broad_hops = rows.get("broad", {})["hops"] if "broad" in rows else 0
+# Behaviour gate reads from agent_eval_answers, not the judged subset above:
+# a question whose endpoint call errored or returned empty still has a row
+# there (hops=0, error set), so a burst of endpoint failures pulls the mean
+# down and fails loudly instead of just vanishing from the judged sample.
+behaviour = spark.sql(f"""
+SELECT category,
+       count(*) AS n,
+       sum(CASE WHEN error != '' OR answer = '' THEN 1 ELSE 0 END) AS failed,
+       round(avg(hops), 2) AS hops
+FROM {prefix}.agent_eval_answers
+WHERE run_at = '{run_at}'
+GROUP BY category ORDER BY category
+""")
+display(behaviour)
+
+rows = {r["category"]: r for r in behaviour.collect()}
+broad = rows.get("broad")
+assert broad is not None, "no broad questions found for this run"
+assert broad["failed"] == 0, (
+    f"{broad['failed']}/{broad['n']} broad question(s) errored or returned an "
+    "empty answer from the deployed endpoint — fix the endpoint before "
+    "trusting the hops gate"
+)
+broad_hops = broad["hops"]
 assert broad_hops and broad_hops > 1.5, (
     f"broad questions averaged {broad_hops} hops — the deployed agent is not "
     "researching; check RAG_PROTOCOL / the served model"
