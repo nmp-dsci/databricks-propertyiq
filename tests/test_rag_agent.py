@@ -138,7 +138,9 @@ def test_agentic_mode_loops_until_the_model_says_it_has_enough():
         ]
     )
     retriever = ScriptedRetriever([[chunk("v1:0")], [chunk("v2:0")]])
-    result = ask(build_agent(llm, retriever, mode="agentic", protocol="v1"), "How does UC track lineage?")
+    result = ask(
+        build_agent(llm, retriever, mode="agentic", protocol="v1"), "How does UC track lineage?"
+    )
 
     # One seed retrieval, then one model-chosen follow-up.
     assert retriever.queries == ["How does UC track lineage?", "unity catalog lineage"]
