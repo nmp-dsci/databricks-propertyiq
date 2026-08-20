@@ -122,7 +122,7 @@ def run_questions(
     return rows
 
 
-def judge_rows(rows: list[dict], source: Path, answer_model: str, variant_label: str) -> None:
+def judge_rows(rows: list[dict], source: Path, answer_model: str, variant_label: str) -> Path:
     """Score rows in place through the dev judge bridge (parity layer)."""
     venv_python = source / ".venv" / "bin" / "python"
     if not venv_python.exists():
@@ -149,6 +149,10 @@ def judge_rows(rows: list[dict], source: Path, answer_model: str, variant_label:
     work.mkdir(exist_ok=True)
     request_path, scored_path = work / "in.jsonl", work / "out.jsonl"
     request_path.write_text(payload, encoding="utf-8")
+    # The run-phase facts (hops, videos, latency) live only in this process;
+    # persisting them beside the judge files makes --finalize possible after
+    # a mid-judge kill instead of re-running the whole variant.
+    (work / "rows.jsonl").write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
     result = subprocess.run(  # noqa: S603 — fixed argv, paths validated above
         [
             str(venv_python),
@@ -166,6 +170,11 @@ def judge_rows(rows: list[dict], source: Path, answer_model: str, variant_label:
     )
     if result.returncode != 0:
         raise SystemExit(f"judge bridge exited {result.returncode}")
+    _merge_verdicts(rows, scored_path)
+    return work
+
+
+def _merge_verdicts(rows: list[dict], scored_path: Path) -> None:
     scored = {
         record["id"]: record
         for record in (
@@ -438,6 +447,56 @@ def print_gate(variant: str, baseline: str | None) -> None:
         print(f"  [{flag}] {check['name']}: {check['actual']} (target {check['target']})")
 
 
+def finalize(work: Path, source: Path, baseline: str | None) -> None:
+    """Complete a killed run from its persisted work dir: judge whatever is
+    missing (the bridge resumes), merge, insert UC rows, print the gate."""
+    rows = [
+        json.loads(line)
+        for line in (work / "rows.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    config = (
+        json.loads((work / "config.json").read_text()) if (work / "config.json").exists() else {}
+    )
+    if not config:
+        raise SystemExit(f"{work}/config.json missing — cannot finalize without the run config")
+    venv_python = source / ".venv" / "bin" / "python"
+    result = subprocess.run(  # noqa: S603 — fixed argv
+        [
+            str(venv_python),
+            str(REPO / "scripts" / "_judge_bridge.py"),
+            "--source",
+            str(source),
+            "--input",
+            str(work / "in.jsonl"),
+            "--output",
+            str(work / "out.jsonl"),
+            "--workers",
+            "6",
+        ],
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"judge bridge exited {result.returncode}")
+    _merge_verdicts(rows, work / "out.jsonl")
+    insert_scores(rows, config, run_id="")
+
+    from databricks.sdk import WorkspaceClient
+
+    w = WorkspaceClient()
+    golden_rows = fetch_golden_rows(w)
+    print_summary(rows, golden_rows)
+    baseline_rows = None
+    if baseline:
+        with contextlib.suppress(Exception):
+            baseline_rows = fetch_variant_rows(w, baseline)
+    verdict = gate_verdict(rows, golden_rows, baseline_rows=baseline_rows)
+    print(f"\ngate: {'PASSED' if verdict['passed'] else 'FAILED'}")
+    for check in verdict["checks"]:
+        flag = "ok " if check["passed"] else "FAIL"
+        print(f"  [{flag}] {check['name']}: {check['actual']} (target {check['target']})")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--variant", help="label recorded with the run, e.g. A0, A1, A2-gptoss")
@@ -461,9 +520,15 @@ def main() -> None:
     )
     parser.add_argument("--judge-model", default="databricks-gpt-oss-120b")
     parser.add_argument("--gate", help="print the s09 gate verdict for this variant and exit")
+    parser.add_argument(
+        "--finalize", help="work dir of a killed run: finish judging + insert + gate"
+    )
     parser.add_argument("--baseline", help="baseline variant for the narrow no-regression check")
     args = parser.parse_args()
 
+    if args.finalize:
+        finalize(Path(args.finalize), Path(args.source), args.baseline)
+        return
     if args.gate:
         print_gate(args.gate, args.baseline)
         return
@@ -505,14 +570,16 @@ def main() -> None:
             llm, counter, mode=mode, protocol=args.protocol, max_hops=args.max_hops
         )
         rows = run_questions(agent, counter, args.variant, mode, questions=selected)
+        config_for_finalize = dict(config)
         if not args.skip_judge:
             print(f"judging {len(rows)} answer(s) with the dev judge ...")
-            judge_rows(
+            work_dir = judge_rows(
                 rows,
                 Path(args.source),
                 answer_model=args.model,
                 variant_label=f"{args.variant}_{mode}",
             )
+            (work_dir / "config.json").write_text(json.dumps(config_for_finalize))
         # UC rows first: the gate and dashboard read them, and the MLflow
         # logging tail has stalled on auth-token churn before — telemetry must
         # never hold the verdict hostage.
