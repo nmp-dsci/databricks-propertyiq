@@ -513,12 +513,14 @@ def main() -> None:
                 answer_model=args.model,
                 variant_label=f"{args.variant}_{mode}",
             )
-        run_id = ""
+        # UC rows first: the gate and dashboard read them, and the MLflow
+        # logging tail has stalled on auth-token churn before — telemetry must
+        # never hold the verdict hostage.
+        if not args.skip_uc and not args.skip_judge:
+            insert_scores(rows, config, run_id="")
         if not args.skip_mlflow:
             run_id = log_mlflow(rows, config)
             print(f"  mlflow run {run_id}")
-        if not args.skip_uc and not args.skip_judge:
-            insert_scores(rows, config, run_id)
         if args.native:
             print("native judge layer (mlflow.genai.evaluate) ...")
             native_evaluate(rows, config, args.judge_model, golden_rows_full(w))

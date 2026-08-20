@@ -450,10 +450,22 @@ existing bronze→silver"]
 <!-- ======================= DECISIONS ======================= -->
 <section id="decisions">
   <div class="card">
-    <p class="kicker">decisions before build</p>
-    <h2>Three calls to lock</h2>
+    <p class="kicker">decisions — locked 2026-08-20</p>
+    <h2>All three locked on the recommended options; build underway</h2>
 
-    <form class="q-form" data-lavish-question="d1-judge-stack"
+    <div class="table-wrap" style="margin-top:12px"><table>
+      <thead><tr><th>decision</th><th>locked choice</th></tr></thead>
+      <tbody>
+        <tr><td><b>D1</b> · judge stack</td><td><span class="tag ok">both</span> dev RAGAS judge via the bridge (parity) + MLflow genai custom scorers on FMAPI gpt-oss-120b (native), with built-in <code>Correctness</code> vs the golden answers</td></tr>
+        <tr><td><b>D2</b> · question set</td><td><span class="tag ok">12 curated</span> 6 broad (incl. the SA-interview question, grounded by 162 Databricks chunks / 14 videos) + 6 narrow reused from <code>silver_golden_qa</code></td></tr>
+        <tr><td><b>D3</b> · optimisation scope</td><td><span class="tag ok">A1 + A2</span> protocol port + model sweep; A3 ReAct rewrite only if the gate fails</td></tr>
+      </tbody>
+    </table></div>
+    <p style="font-size:13.5px;color:var(--muted);margin-top:10px">Judge context budget added during P0: ragas
+    <code>context_precision</code> costs one judge call per context and agentic answers carry 30–70, so every
+    record on both sides is judged on its best 16 — identical budget, comparable composites.</p>
+
+    <form class="q-form" style="display:none" data-lavish-question="d1-judge-stack"
       onsubmit="event.preventDefault();var f=event.currentTarget;var c=new FormData(f).get('d1');if(!c)return;window.lavish.queuePrompt('D1 judge stack: '+c,{tag:'choice',text:'D1: '+c,element:f,data:{question:'d1-judge-stack',answer:c}});f.classList.add('is-queued');">
       <h3>D1 · Judge stack</h3>
       <p class="why">Parity needs the dev judge; the Databricks-native story needs MLflow scorers. Build one or both?</p>
@@ -466,7 +478,7 @@ existing bronze→silver"]
       <button type="submit">Queue answer</button><span class="queued">✓ queued</span>
     </form>
 
-    <form class="q-form" data-lavish-question="d2-question-set"
+    <form class="q-form" style="display:none" data-lavish-question="d2-question-set"
       onsubmit="event.preventDefault();var f=event.currentTarget;var c=new FormData(f).get('d2');if(!c)return;window.lavish.queuePrompt('D2 question set: '+c,{tag:'choice',text:'D2: '+c,element:f,data:{question:'d2-question-set',answer:c}});f.classList.add('is-queued');">
       <h3>D2 · Golden question set</h3>
       <p class="why">Every question costs ask + judge on both sides, per variant. Size sets sweep cost and signal.</p>
@@ -479,7 +491,7 @@ existing bronze→silver"]
       <button type="submit">Queue answer</button><span class="queued">✓ queued</span>
     </form>
 
-    <form class="q-form" data-lavish-question="d3-opt-scope"
+    <form class="q-form" style="display:none" data-lavish-question="d3-opt-scope"
       onsubmit="event.preventDefault();var f=event.currentTarget;var c=new FormData(f).get('d3');if(!c)return;window.lavish.queuePrompt('D3 optimisation scope: '+c,{tag:'choice',text:'D3: '+c,element:f,data:{question:'d3-opt-scope',answer:c}});f.classList.add('is-queued');">
       <h3>D3 · Optimisation scope</h3>
       <p class="why">How far phase 4 goes before we call it.</p>

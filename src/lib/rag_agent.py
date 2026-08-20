@@ -41,6 +41,16 @@ TOP_K = 8
 MAX_SUBQUESTIONS = 3
 MAX_HOPS = 3
 
+# Agentic decide protocols (s09). v1 is the original binary sufficiency check;
+# v2 ports transcript-lab's research protocol — sub-topic gap analysis, effort
+# calibration ("broad question → 3-6 focused searches"), no repeated queries —
+# which is what turned the dev agent into a researcher while v1 stopped after
+# one hop: with eight plausible excerpts already attached, "do you have enough?"
+# is nearly always answerable with yes.
+PROTOCOLS = ("v1", "v2")
+DEFAULT_PROTOCOL = "v1"
+PROTOCOL_MAX_HOPS = {"v1": MAX_HOPS, "v2": 6}
+
 SYSTEM = """\
 You answer questions about a corpus of YouTube transcripts covering data
 engineering, Databricks, AI engineering, system design and careers.
@@ -61,6 +71,9 @@ class RagState(TypedDict, total=False):
     queries: list[str]
     chunks: list[dict[str, Any]]
     hops: int
+    # Every query already searched (v2 protocol): fed back into the decide
+    # prompt so the model cannot burn its hop budget re-running one query.
+    asked: list[str]
     answer: str
     decision_log: Annotated[list[str], lambda a, b: a + b]
 
@@ -105,14 +118,34 @@ def dedupe_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(best.values(), key=lambda c: c.get("score") or 0, reverse=True)
 
 
+ANSWER_STRUCTURE_V2 = """\
+Structure the answer as:
+## Key Findings
+A numbered list of the most important insights, each one concise sentence with
+its citations. Then one short titled section per finding, expanding it from the
+excerpts that support it. For a narrow factual question, a single finding with
+a short expansion is fine."""
+
+
 def build_agent(
     llm: Callable[[list[dict[str, str]]], str],
     retrieve: Callable[[str, int], list[dict[str, Any]]],
     mode: str = DEFAULT_MODE,
+    protocol: str = DEFAULT_PROTOCOL,
+    max_hops: int | None = None,
 ):
-    """Compile one mode's graph with injected LLM and retriever."""
+    """Compile one mode's graph with injected LLM and retriever.
+
+    ``protocol`` and ``max_hops`` only shape the *agentic* mode's decide loop
+    and answer contract; single and multi are the eval's fixed controls and
+    deliberately never change under a protocol flip.
+    """
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}, expected one of {MODES}")
+    if protocol not in PROTOCOLS:
+        raise ValueError(f"unknown protocol {protocol!r}, expected one of {PROTOCOLS}")
+    hop_budget = max_hops if max_hops is not None else PROTOCOL_MAX_HOPS[protocol]
+    v2 = mode == "agentic" and protocol == "v2"
 
     # -- shared nodes ------------------------------------------------------
 
@@ -123,6 +156,9 @@ def build_agent(
                 "answer": ("I couldn't find anything in the transcript corpus that answers that."),
                 "decision_log": ["answer: no excerpts retrieved"],
             }
+        instruction = "Answer the question from these excerpts, with citations."
+        if v2:
+            instruction += "\n" + ANSWER_STRUCTURE_V2
         text = llm(
             [
                 {"role": "system", "content": SYSTEM},
@@ -131,7 +167,7 @@ def build_agent(
                     "content": (
                         f"Question: {state['question']}\n\n"
                         f"Retrieved excerpts:\n{format_chunks(chunks)}\n\n"
-                        "Answer the question from these excerpts, with citations."
+                        f"{instruction}"
                     ),
                 },
             ]
@@ -148,6 +184,7 @@ def build_agent(
         return {
             "chunks": dedupe_chunks(chunks),
             "queries": [state["question"]],
+            "asked": [state["question"]],
             "decision_log": [f"retrieve: {len(chunks)} excerpts for the question as asked"],
         }
 
@@ -188,36 +225,79 @@ def build_agent(
 
     # -- agentic -----------------------------------------------------------
 
+    def _decide_prompt(state: RagState) -> str:
+        chunks = state.get("chunks") or []
+        if protocol == "v1":
+            return (
+                f"Question: {state['question']}\n\n"
+                "Excerpts retrieved so far:\n"
+                f"{format_chunks(chunks)}\n\n"
+                "Do you have enough to answer with citations? Reply with JSON only:\n"
+                '{"action": "answer"} or {"action": "search", "query": "<what to look up>"}'
+            )
+        videos = len({c.get("video_id") for c in chunks if c.get("video_id")})
+        asked = state.get("asked") or []
+        asked_block = "\n".join(f"- {query}" for query in asked) or "- (none yet)"
+        return (
+            f"Question: {state['question']}\n\n"
+            f"Excerpts retrieved so far ({len(chunks)} unique, from {videos} video(s)):\n"
+            f"{format_chunks(chunks)}\n\n"
+            f"Queries already searched — never repeat these:\n{asked_block}\n\n"
+            "You are mid-research, deciding whether to search again or answer now.\n"
+            "Work through this checklist:\n"
+            "1. List the distinct sub-topics the question implies.\n"
+            "2. Mark which sub-topics the excerpts above already cover, and from how\n"
+            "   many different videos.\n"
+            '3. Calibrate effort: a broad question (a guide, a comparison, a "what do\n'
+            '   the videos say about X") typically needs 3-6 focused searches before\n'
+            "   answering; a narrow factual question needs 1-2.\n"
+            "4. If any sub-topic is uncovered — or covered by only one video when the\n"
+            "   corpus likely has more — search for it with a focused query that\n"
+            "   targets that sub-topic specifically. Never paraphrase the original\n"
+            "   question as the query.\n\n"
+            "Reply with JSON only, on one line:\n"
+            '{"action": "search", "query": "<focused sub-topic query>", '
+            '"gaps": ["<uncovered sub-topic>", "..."]}\n'
+            "or, only when every sub-topic is covered:\n"
+            '{"action": "answer"}'
+        )
+
     def decide(state: RagState) -> RagState:
         """The ReAct step: search again, or stop and answer."""
         hops = state.get("hops", 0)
-        if hops >= MAX_HOPS:
+        if hops >= hop_budget:
             # Clearing `queries` is what actually stops the loop — leaving the
             # previous hop's query in state would route straight back to search.
             return {
                 "queries": [],
-                "decision_log": [f"decide: hop cap ({MAX_HOPS}) reached, answering"],
+                "decision_log": [f"decide: hop cap ({hop_budget}) reached, answering"],
             }
         raw = llm(
             [
                 {"role": "system", "content": SYSTEM},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Question: {state['question']}\n\n"
-                        "Excerpts retrieved so far:\n"
-                        f"{format_chunks(state.get('chunks') or [])}\n\n"
-                        "Do you have enough to answer with citations? Reply with JSON only:\n"
-                        '{"action": "answer"} or {"action": "search", "query": "<what to look up>"}'
-                    ),
-                },
+                {"role": "user", "content": _decide_prompt(state)},
             ]
         )
         action = _parse_action(raw)
-        if action.get("action") == "search" and action.get("query"):
+        query = str(action.get("query") or "").strip()
+        if action.get("action") == "search" and query:
+            # v2 only: v1 is the measured baseline and must keep its shipped
+            # behaviour bit-for-bit, repeated queries included.
+            asked = {previous.strip().lower() for previous in (state.get("asked") or [])}
+            if v2 and query.lower() in asked:
+                # A repeated query would spend a hop re-reading the same rows;
+                # treat it as the model having nothing new to look for.
+                return {
+                    "queries": [],
+                    "decision_log": [f"decide: repeated query {query!r} blocked, answering"],
+                }
+            gaps = action.get("gaps")
+            note = (
+                f" (gaps: {', '.join(map(str, gaps))})" if isinstance(gaps, list) and gaps else ""
+            )
             return {
-                "queries": [action["query"]],
-                "decision_log": [f"decide: search again for {action['query']!r}"],
+                "queries": [query],
+                "decision_log": [f"decide: search again for {query!r}{note}"],
             }
         return {"queries": [], "decision_log": ["decide: enough evidence, answering"]}
 
@@ -228,6 +308,7 @@ def build_agent(
         return {
             "chunks": merged,
             "hops": state.get("hops", 0) + 1,
+            "asked": (state.get("asked") or []) + [query],
             "decision_log": [f"search: +{len(found)} excerpts, {len(merged)} unique total"],
         }
 
@@ -353,17 +434,40 @@ def make_retriever(
     return retrieve
 
 
-def make_databricks_agent(
-    index_name: str = "workspace.rag.rag_chunks_gte",
+def normalize_content(content: Any) -> str:
+    """FMAPI message content as plain text, whatever shape the model returns.
+
+    llama endpoints return a string; the reasoning models (gpt-oss, qwen)
+    return a list of typed parts where the answer lives in the ``text`` parts
+    and the chain-of-thought in ``reasoning`` parts. The agent only ever wants
+    the text — reasoning parts leaking into a decide step would be parsed as
+    prose around the JSON, and into an answer as visible thinking.
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        texts = []
+        for part in content:
+            if isinstance(part, dict):
+                if part.get("type") == "text" and part.get("text"):
+                    texts.append(str(part["text"]))
+            elif isinstance(part, str):
+                texts.append(part)
+        return "\n".join(texts)
+    return str(content)
+
+
+def make_fmapi_llm(
     model_endpoint: str = "databricks-meta-llama-3-3-70b-instruct",
-    embedding_endpoint: str = "databricks-gte-large-en",
-    mode: str = DEFAULT_MODE,
+    workspace_client=None,
 ):
-    """Wire one mode's graph to the real FMAPI model and Vector Search index."""
+    """A messages -> text callable over one FMAPI chat endpoint."""
     from databricks.sdk import WorkspaceClient
     from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
 
-    w = WorkspaceClient()
+    w = workspace_client or WorkspaceClient()
 
     @mlflow.trace(span_type="LLM", name=model_endpoint)
     def llm(messages: list[dict[str, str]]) -> str:
@@ -374,7 +478,23 @@ def make_databricks_agent(
             ],
             temperature=0.0,
         )
-        return response.choices[0].message.content
+        return normalize_content(response.choices[0].message.content)
 
+    return llm
+
+
+def make_databricks_agent(
+    index_name: str = "workspace.rag.rag_chunks_gte",
+    model_endpoint: str = "databricks-meta-llama-3-3-70b-instruct",
+    embedding_endpoint: str = "databricks-gte-large-en",
+    mode: str = DEFAULT_MODE,
+    protocol: str = DEFAULT_PROTOCOL,
+    max_hops: int | None = None,
+):
+    """Wire one mode's graph to the real FMAPI model and Vector Search index."""
+    from databricks.sdk import WorkspaceClient
+
+    w = WorkspaceClient()
+    llm = make_fmapi_llm(model_endpoint, workspace_client=w)
     retrieve = make_retriever(index_name, embedding_endpoint, workspace_client=w)
-    return build_agent(llm, retrieve, mode=mode)
+    return build_agent(llm, retrieve, mode=mode, protocol=protocol, max_hops=max_hops)
