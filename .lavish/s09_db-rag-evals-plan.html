@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>db-rag-evals — judge the agent, fix the single-hop loop</title>
+<script>
+  (function(){
+    var t; try{t=localStorage.getItem('s09-theme')}catch(e){}
+    var mq=window.matchMedia('(prefers-color-scheme: dark)');
+    if(t!=='light'&&t!=='dark'){t=mq.matches?'dark':'light'}
+    document.documentElement.setAttribute('data-theme',t);
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#F4F6F3; --panel:#FFFFFF; --panel-2:#FAFBF9; --ink:#14181C; --ink-soft:#3E4A44;
+  --muted:#5A655D; --faint:#77837A; --line:#DDE4DC; --line-2:#C9D2C9;
+  --signal:#17876B; --signal-soft:#E4F1EC; --amber:#B26A12; --amber-soft:#F6ECDC;
+  --fail:#A8402F; --fail-soft:#F4E2DE;
+  --chip-bg:#E4F1EC; --chip-ink:#11674F; --hover:#FAFBF9;
+  --nav-bg:rgba(244,246,243,.85); --grid-line:rgba(16,22,19,.028);
+  --hero-glow:rgba(23,135,107,.07); --pre-bg:#14181C; --pre-ink:#E8ECE9;
+  --shadow:0 1px 2px rgba(16,22,19,.04),0 10px 26px -14px rgba(16,22,19,.16);
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --w:1140px;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#101511; --panel:#171E19; --panel-2:#1C2420; --ink:#E8EDE9; --ink-soft:#C3CCC5;
+  --muted:#96A29A; --faint:#71807A; --line:#242E27; --line-2:#33413A;
+  --signal:#43C29A; --signal-soft:#173428; --amber:#D19243; --amber-soft:#2A2113;
+  --fail:#E0715C; --fail-soft:#2E1A16;
+  --chip-bg:#173428; --chip-ink:#7FDDBB; --hover:#1C2420;
+  --nav-bg:rgba(16,21,17,.85); --grid-line:rgba(232,237,233,.035);
+  --hero-glow:rgba(67,194,154,.09); --pre-bg:#0B0F0C; --pre-ink:#DEE5E0;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 10px 26px -14px rgba(0,0,0,.55);
+}
+*,*::before,*::after{box-sizing:border-box;min-width:0}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.62;letter-spacing:-.005em;
+  background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:34px 34px;transition:background-color .2s,color .2s}
+a{color:var(--signal);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:3px}
+h1,h2,h3,h4{font-weight:600;letter-spacing:-.02em;line-height:1.2;margin:0}
+:where(p,h1,h2,h3,h4,li,td,th,summary,label,button){overflow-wrap:anywhere}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 12px}
+.nav{position:sticky;top:0;z-index:50;background:var(--nav-bg);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav-inner{max-width:var(--w);margin:0 auto;padding:11px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px;color:var(--ink)}
+.brand b{font-size:15px;font-weight:600}
+.brand span{font-family:var(--mono);font-size:12px;color:var(--faint)}
+.nav-links{display:flex;gap:16px;flex-wrap:wrap;font-size:13.5px}
+.nav-links a{color:var(--muted)}
+.theme-btn{border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:8px;padding:5px 10px;font-family:var(--mono);font-size:12px;cursor:pointer}
+main{max-width:var(--w);margin:0 auto;padding:30px 22px 90px}
+section{margin-top:48px}
+.hero{padding:38px 0 6px;background:radial-gradient(700px 260px at 20% 0%,var(--hero-glow),transparent)}
+.hero h1{font-size:clamp(25px,4vw,36px);max-width:30ch}
+.hero p.lede{font-size:17px;color:var(--ink-soft);max-width:82ch;margin:16px 0 0}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip-bg);color:var(--chip-ink);border-radius:999px;padding:3px 12px;font-family:var(--mono);font-size:12px;font-weight:500}
+.chip.warn{background:var(--amber-soft);color:var(--amber)}
+.chip.plain{background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:22px 24px}
+.card h2{font-size:21px;margin-bottom:6px}
+.card h3{font-size:16px}
+p{margin:10px 0}
+ul,ol{margin:10px 0;padding-left:22px}
+li{margin:5px 0}
+code{font-family:var(--mono);font-size:.88em;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+pre{background:var(--pre-bg);color:var(--pre-ink);border-radius:10px;padding:13px 15px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.55;margin:10px 0}
+pre code{background:none;border:none;padding:0;color:inherit;font-size:inherit}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line-2)}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.tag{display:inline-block;font-family:var(--mono);font-size:11px;border-radius:5px;padding:1px 7px;font-weight:500;white-space:nowrap}
+.tag.ok{background:var(--signal-soft);color:var(--signal)}
+.tag.warn{background:var(--amber-soft);color:var(--amber)}
+.tag.risk{background:var(--fail-soft);color:var(--fail)}
+.callout{border-left:3px solid var(--signal);background:var(--signal-soft);border-radius:0 10px 10px 0;padding:12px 16px;font-size:14.5px;color:var(--ink-soft)}
+.callout.warn{border-color:var(--amber);background:var(--amber-soft)}
+.callout.risk{border-color:var(--fail);background:var(--fail-soft)}
+.mermaid-wrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto;margin-top:14px}
+.mermaid{display:flex;justify-content:center;min-height:120px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(430px,100%),1fr));gap:16px;margin-top:14px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:16px;margin-top:14px}
+.q-form{background:var(--panel);border:1px solid var(--line-2);border-radius:12px;padding:16px 18px;margin-top:14px}
+.q-form h3{font-size:15px;margin-bottom:4px}
+.q-form .why{font-size:13px;color:var(--muted);margin:2px 0 0}
+.q-form label{display:flex;gap:10px;align-items:flex-start;padding:7px 10px;border:1px solid var(--line);border-radius:9px;margin-top:8px;cursor:pointer;font-size:14px}
+.q-form label:hover{background:var(--hover)}
+.q-form input[type=radio]{margin-top:4px}
+.q-form textarea{width:100%;margin-top:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);color:var(--ink);font-family:var(--sans);font-size:13.5px;padding:8px 10px;min-height:40px}
+.q-form button{margin-top:10px;background:var(--signal);color:#fff;border:none;border-radius:8px;padding:7px 15px;font-family:var(--sans);font-size:13.5px;font-weight:600;cursor:pointer}
+.q-form button:hover{filter:brightness(1.08)}
+.q-form .queued{display:none;margin-left:10px;font-family:var(--mono);font-size:12px;color:var(--signal)}
+.q-form.is-queued .queued{display:inline}
+.phase{display:grid;grid-template-columns:56px minmax(0,1fr);gap:14px;padding:16px 0;border-bottom:1px solid var(--line)}
+.phase:last-child{border-bottom:none}
+.phase .num{font-family:var(--mono);font-weight:600;font-size:20px;color:var(--signal);text-align:center;background:var(--signal-soft);border-radius:10px;height:44px;display:flex;align-items:center;justify-content:center}
+.phase h3{font-size:16px}
+.phase .meta{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:2px}
+.qa-card{border-top:3px solid var(--signal)}
+.qa-card .q{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin:0 0 8px}
+.evidence{font-family:var(--mono);font-size:12px;color:var(--faint)}
+blockquote{margin:12px 0;border-left:3px solid var(--line-2);padding:6px 16px;color:var(--ink-soft);font-size:15px;background:var(--panel-2);border-radius:0 8px 8px 0}
+footer{margin-top:70px;color:var(--faint);font-size:13px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <div class="brand"><b>PropertyIQ · s09</b><span>db-rag-evals — judge + multi-hop fix</span></div>
+  <div class="nav-links">
+    <a href="#answers">Answers</a><a href="#diagnosis">Diagnosis</a><a href="#judge">Judge</a>
+    <a href="#goldens">Goldens</a><a href="#matrix">Matrix</a><a href="#phases">Phases</a>
+    <a href="#risks">Risks</a><a href="#decisions">Decisions</a>
+  </div>
+  <button class="theme-btn" id="themeBtn" type="button">theme</button>
+</div></nav>
+<main>
+
+<div class="hero">
+  <p class="kicker">branch db-rag-evals · plan · 2026-08-20</p>
+  <h1>Judge the Databricks agent with the same judge as dev — then make it research like dev</h1>
+  <p class="lede">Three asks in one loop: an LLM-as-a-judge on Databricks (RAGAS-style), a diagnosis of why
+  <code>rag_transcript_agent</code>'s agentic mode stops after one retrieval while the dev
+  <code>rag_agent</code> keeps digging, and a golden set captured from the dev workbench that scores every
+  variant until the deployed agent behaves like the one you built locally.</p>
+  <div class="badges">
+    <span class="chip">branch db-rag-evals ✓ created</span>
+    <span class="chip">dev server :8011 ✓ up</span>
+    <span class="chip plain">judge parity via dev RAGAS judge</span>
+    <span class="chip plain">8 FMAPI chat models to sweep</span>
+    <span class="chip warn">judging runs on the laptop — nothing egresses</span>
+  </div>
+</div>
+
+<!-- ======================= ANSWERS ======================= -->
+<section id="answers">
+  <p class="kicker">the three questions, answered up front</p>
+  <div class="grid3">
+
+    <div class="card qa-card">
+      <p class="q">Q1 · “Can I add an LLM-as-a-judge in Databricks like RAGAS?”</p>
+      <h3>Yes — two layers, both buildable today</h3>
+      <p><b>Parity layer:</b> the dev repo's RAGAS judge is already reusable — same metrics
+      (<code>faithfulness</code>, <code>answer_relevancy</code>, <code>context_precision</code> plus the
+      <code>depth-v2</code> rubric's five depth metrics). Run it over <em>both</em> agents' answers so
+      scores are directly comparable — one judge, one rubric, two systems.</p>
+      <p><b>Native layer:</b> MLflow 3 <code>mlflow.genai.evaluate()</code> with custom
+      <code>@scorer</code> judges running on an FMAPI model (e.g. <code>gpt-oss-120b</code>).
+      Assessments attach to the traces shipped on the <code>rag</code> branch, land in
+      <code>workspace.rag.judge_scores</code>, and get a dashboard page.</p>
+      <p class="evidence">evidence: src/evals/judge.py (dev), databricks-mlflow-evaluation skill, live traces on both endpoints</p>
+    </div>
+
+    <div class="card qa-card">
+      <p class="q">Q2 · “Is the single loop because of the model?”</p>
+      <h3>Mostly no — it's the loop design and prompt. Model is third.</h3>
+      <p>Ranked causes, from reading both implementations:</p>
+      <ol style="font-size:14.5px">
+        <li><b>Structure</b> — Databricks retrieves 8 chunks <em>before</em> the LLM is ever consulted,
+        then asks a yes/no “enough to answer?”. With 8 plausible excerpts, “yes” is nearly always defensible.
+        Dev's LLM starts empty and must drive every retrieval itself via tool calls.</li>
+        <li><b>Prompt</b> — dev's system prompt is a research <em>protocol</em>: identify sub-topics, one
+        focused call each, “for a broad question this may be 5–8 calls”. Ours has no protocol, no calibration,
+        and an unparseable reply defaults to “answer”.</li>
+        <li><b>Model</b> — dev runs DeepSeek v4; ours llama-3.3-70b at temp 0. Real but secondary — and testable,
+        since this workspace now serves 8 FMAPI chat models.</li>
+      </ol>
+      <p class="evidence">evidence: AGENTIC_RAG_SYSTEM_PROMPT lines 184–194 (dev) vs decide() in src/lib/rag_agent.py:191</p>
+    </div>
+
+    <div class="card qa-card">
+      <p class="q">Q3 · “Capture dev answers as goldens and optimise toward them?”</p>
+      <h3>Yes — the dev workbench already persists everything we need</h3>
+      <p><code>POST /api/ask</code> with <code>setups=["rag_agent"]</code> runs the agentic loop and stores
+      the answer, retrieved contexts <em>and</em> the per-iteration trace (queries, chunk counts) in its history;
+      <code>POST /api/judge</code> scores the entry with RAGAS and stores that too.</p>
+      <p>Export those entries as a <code>golden_answers</code> entity through the existing landing contract
+      (sha8 parquet → volume → <code>rag_ingest</code> → silver), then score every Databricks variant against
+      them with the same judge until broad questions get dev-like research behaviour.</p>
+      <p class="evidence">evidence: /api/ask + /api/judge in dev src/api/main.py; landing contract proven on branch rag</p>
+    </div>
+
+  </div>
+
+  <blockquote><b>Canonical probe question</b> (goes in the golden set, drives the demo):<br>
+  “Can you give me a guide into what I need to know about Databricks — I'm interviewing for solution architect.”<br>
+  <span style="font-size:13.5px;color:var(--muted)">Dev today: 5–8 focused retrievals, a Key-Findings answer citing many videos.
+  Databricks today: 1 retrieval, prose answer from whatever the first 8 chunks happened to cover.</span></blockquote>
+</section>
+
+<!-- ======================= DIAGNOSIS ======================= -->
+<section id="diagnosis">
+  <div class="card">
+    <p class="kicker">diagnosis</p>
+    <h2>Two loops that look alike and behave nothing alike</h2>
+    <p>Both are LangGraph. The difference is <em>who drives retrieval</em> and <em>what the stop question is</em>.</p>
+
+    <div class="grid2">
+      <div>
+        <h3 style="margin-top:10px">dev · <code>rag_agent</code> (transcript-rag-agent)</h3>
+        <div class="mermaid-wrap"><pre class="mermaid">
+flowchart TD
+  Q["question"] --> G["generate_query_or_respond
+LLM with bound retrieve tool
+DeepSeek v4"]
+  G -->|"tool call (focused query)"| T["ToolNode retrieve
+Chroma + MiniLM"]
+  T --> G
+  G -->|"no tool call"| A["final answer
+Key Findings + inline citations"]
+  style G fill:#17876B,color:#fff,stroke:none
+        </pre></div>
+        <p style="font-size:14px;color:var(--muted)">LLM starts with <b>zero context</b> and must call the tool to see anything.
+        Protocol prompt calibrates effort: “broad question → 5–8 calls”. Cap: 10 iterations via <code>recursion_limit</code>.</p>
+      </div>
+      <div>
+        <h3 style="margin-top:10px">databricks · <code>rag_transcript_agent</code> agentic mode</h3>
+        <div class="mermaid-wrap"><pre class="mermaid">
+flowchart TD
+  Q2["question"] --> S["seed: retrieve k=8
+gte index, question as-is"]
+  S --> D{"decide: enough to answer?
+JSON yes/no
+llama-3.3-70b"}
+  D -->|"search: one query"| R["search hop k=8"]
+  R --> D
+  D -->|"answer"| A2["answer with citations"]
+  style D fill:#B26A12,color:#fff,stroke:none
+        </pre></div>
+        <p style="font-size:14px;color:var(--muted)">LLM first sees the question <b>with 8 chunks already attached</b> and is asked
+        a binary sufficiency question. Cap: <code>MAX_HOPS = 3</code> — but it rarely takes even the second hop.</p>
+      </div>
+    </div>
+
+    <div class="table-wrap" style="margin-top:16px"><table>
+      <thead><tr><th>aspect</th><th>dev rag_agent</th><th>databricks agentic mode</th></tr></thead>
+      <tbody>
+        <tr><td>retrieval driver</td><td>LLM tool calls — every retrieval is the model's own decision</td><td>graph seeds hop 1 unconditionally; LLM only approves/denies more</td></tr>
+        <tr><td>stop condition</td><td>model answers <em>without</em> a tool call</td><td>model answers <code>{"action":"answer"}</code> to a yes/no prompt</td></tr>
+        <tr><td>effort calibration</td><td>“broad question may be 5–8 calls, narrow 1–2” — in the prompt</td><td>none — no notion of broad vs narrow</td></tr>
+        <tr><td>hop budget</td><td>10 iterations</td><td>3 hops (rarely used)</td></tr>
+        <tr><td>answer contract</td><td>structured markdown: Key Findings + one section per finding</td><td>free prose with citations</td></tr>
+        <tr><td>parse failure</td><td>n/a — tool calls are structured natively</td><td>defaults to “answer”, ending the loop</td></tr>
+        <tr><td>model</td><td>DeepSeek v4 (<code>deepseek-v4-flash</code>)</td><td><code>llama-3.3-70b</code>, temp 0</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="callout warn" style="margin-top:16px"><b>Honest caveat:</b> for narrow questions, one hop is often genuinely
+    sufficient — the gte index's first 8 chunks are good. Single-hop is only a defect on <em>broad</em> questions.
+    That's why the golden set is stratified broad/narrow and success is judged per stratum, not globally.</div>
+  </div>
+</section>
+
+<!-- ======================= JUDGE ======================= -->
+<section id="judge">
+  <div class="card">
+    <p class="kicker">judge design</p>
+    <h2>One judge for parity, one for the platform story</h2>
+    <p><b>Parity rule:</b> a score is only comparable if the same judge produced it. So the dev repo's RAGAS judge
+    (DeepSeek-backed, rubric <code>depth-v2</code>) scores <em>both</em> agents' answers — run on the laptop via a
+    small bridge script executed with the dev repo's own venv, the exact pattern <code>_chroma_dump.py</code> proved.
+    Nothing leaves the workspace; we pull answers out and judge locally.</p>
+
+    <div class="table-wrap" style="margin-top:12px"><table>
+      <thead><tr><th>metric</th><th>what it measures</th><th>dev RAGAS judge</th><th>databricks-native mirror</th></tr></thead>
+      <tbody>
+        <tr><td><code>faithfulness</code></td><td>is every claim supported by retrieved chunks?</td><td>ragas-v1</td><td>custom <code>@scorer</code> on FMAPI (or built-in <code>RetrievalGroundedness</code>)</td></tr>
+        <tr><td><code>answer_relevancy</code></td><td>does the answer address the question?</td><td>ragas-v1</td><td>built-in <code>RelevanceToQuery</code></td></tr>
+        <tr><td><code>context_precision</code></td><td>were the retrieved chunks useful?</td><td>ragas-v1</td><td>custom <code>@scorer</code> per-chunk verdicts</td></tr>
+        <tr><td><code>coverage</code> · <code>evidence_breadth</code> · <code>insight_depth</code> · <code>specificity</code> · <code>calibration</code></td>
+            <td>the depth rubric — rewards multi-source synthesis, the thing single-hop answers can't do</td>
+            <td>depth-v2 (60% of composite)</td><td>ported as one multi-metric <code>@scorer</code> call</td></tr>
+        <tr><td><code>correctness vs golden</code></td><td>does it agree with the dev reference answer?</td><td>—</td><td>built-in <code>Correctness</code> with golden as expectation</td></tr>
+        <tr><td><code>hops</code> · <code>unique_videos</code></td><td>research behaviour — counted, not judged</td><td>from workbench trace</td><td>counted from RETRIEVER spans in MLflow traces</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="callout" style="margin-top:14px"><b>Why depth-v2 matters here:</b> the dev repo added it precisely because
+    ragas-v1 lets a faithful one-chunk restatement score ~1.0. If we optimised on grounding metrics alone, the current
+    single-hop agent would already look fine and nothing would improve. Depth metrics (coverage, evidence breadth) are
+    what make multi-hop research <em>win</em> the eval.</div>
+
+    <p style="margin-top:14px"><b>Where scores live:</b> one MLflow run per variant in experiment
+    <code>rag-agent-evals</code> (params: prompt version, model, mode; metrics: judge scores + hops), rows in
+    <code>workspace.rag.judge_scores</code>, and a new page on the existing <code>rag_eval</code> dashboard.
+    Trace assessments make individual answers inspectable in the Traces tab.</p>
+  </div>
+</section>
+
+<!-- ======================= GOLDENS ======================= -->
+<section id="goldens">
+  <div class="card">
+    <p class="kicker">golden capture</p>
+    <h2>Dev workbench → landing volume → <code>silver_golden_answers</code></h2>
+    <div class="mermaid-wrap"><pre class="mermaid">
+flowchart LR
+  QS["question set
+broad + narrow"] --> ASK["POST /api/ask
+setups=[rag_agent]"]
+  ASK --> H["workbench history
+answer + contexts + trace"]
+  H --> J["POST /api/judge
+RAGAS depth-v2"]
+  J --> EXP["scripts/export_dev_goldens.py
+golden_answers parquet, sha8"]
+  EXP --> VOL["landing volume
+rag/landing/golden_answers/"]
+  VOL --> ING["rag_ingest job
+existing bronze→silver"]
+  ING --> SILVER["silver_golden_answers"]
+        </pre></div>
+
+    <div class="table-wrap" style="margin-top:12px"><table>
+      <thead><tr><th>column</th><th>from</th><th>note</th></tr></thead>
+      <tbody>
+        <tr><td><code>question_id</code>, <code>question</code>, <code>category</code></td><td>question set</td><td>category ∈ broad | narrow — the success gate is per-category</td></tr>
+        <tr><td><code>answer_md</code>, <code>references</code></td><td>/api/ask result</td><td>the golden answer + its citations</td></tr>
+        <tr><td><code>contexts</code></td><td>persisted retrieval contexts</td><td>what the judge grounds faithfulness against</td></tr>
+        <tr><td><code>iterations</code>, <code>queries</code></td><td>per-iteration trace</td><td>the research behaviour target (dev hop count)</td></tr>
+        <tr><td><code>faithfulness … calibration</code>, <code>composite</code></td><td>/api/judge</td><td>dev's own scores — the bar to meet</td></tr>
+        <tr><td><code>judge_model</code>, <code>answer_model</code>, <code>captured_at</code>, <code>text_sha</code></td><td>export script</td><td>idempotent re-runs, same contract as every other entity</td></tr>
+      </tbody>
+    </table></div>
+
+    <p style="font-size:14px;color:var(--muted);margin-top:10px">One new entity in <code>rag_export.ENTITY_KEYS</code> + the
+    bronze/silver entity lists — the pipeline machinery already exists. Falls back to driving the runner inside the dev venv
+    (subprocess) if the SSE flow is awkward to script. Corpus is public YouTube transcript data; the no-names rule holds —
+    channel/video titles only, as already landed.</p>
+  </div>
+</section>
+
+<!-- ======================= MATRIX ======================= -->
+<section id="matrix">
+  <div class="card">
+    <p class="kicker">optimisation matrix</p>
+    <h2>Variants that isolate prompt from model</h2>
+    <p>Each variant runs the full golden question set through the <em>local</em> agent build (same code path the endpoint
+    serves), gets judged, and becomes one MLflow run. A1-on-llama vs A0-on-gpt-oss isolates whether the prompt or the
+    model moves the needle.</p>
+
+    <div class="table-wrap" style="margin-top:12px"><table>
+      <thead><tr><th>variant</th><th>change</th><th>hypothesis</th></tr></thead>
+      <tbody>
+        <tr><td><code>A0</code> baseline</td><td>current decide prompt · llama-3.3-70b</td><td>reproduces the 1-hop behaviour, scores below dev on broad questions</td></tr>
+        <tr><td><code>A1</code> protocol port</td><td>dev's research protocol adapted to the JSON-action loop: gap analysis (“list sub-topics not yet covered”), effort calibration (broad → keep searching), raise <code>MAX_HOPS</code> 3→6, answer contract (Key Findings structure)</td><td>the main fix — structure + prompt, same model</td></tr>
+        <tr><td><code>A2</code> model sweep</td><td>A1 prompt × {<code>gpt-oss-120b</code>, <code>qwen3.5-122b</code>, <code>llama-4-maverick</code>, <code>llama-3.3-70b</code> control}</td><td>a stronger reasoner researches more willingly; also: A0 × gpt-oss-120b isolates pure model effect</td></tr>
+        <tr><td><code>A3</code> ReAct rewrite <span class="tag warn">only if needed</span></td><td>native tool-calling loop mirroring dev exactly (FMAPI function calling)</td><td>held in reserve — bigger serving-image change; build only if A1/A2 miss the gate</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="callout" style="margin-top:14px"><b>Success gate:</b> on broad questions — mean hops ≥ 3 (from RETRIEVER spans),
+    depth-v2 composite within 5% of the dev golden composite or better; on narrow questions — no regression vs A0
+    (single-hop staying single-hop on narrow questions is <em>correct</em>). Winner's config becomes
+    <code>rag_agent.py</code> defaults; agent re-registered and redeployed; final judged run against the live endpoint.</div>
+  </div>
+</section>
+
+<!-- ======================= PHASES ======================= -->
+<section id="phases">
+  <div class="card">
+    <p class="kicker">build order</p>
+    <h2>Six phases, each with its own proof</h2>
+
+    <div class="phase"><div class="num">0</div><div>
+      <h3>Probes &amp; scaffolding</h3>
+      <p class="meta">deliverable: probe notes + judge bridge working on one hand-written answer</p>
+      <p>Confirm dev server endpoints scriptable end-to-end (ask → history → judge); build
+      <code>scripts/_judge_bridge.py</code> (runs in dev venv, JSONL in → scores out); probe one FMAPI judge call
+      (<code>gpt-oss-120b</code>) and one <code>mlflow.genai.evaluate()</code> smoke on Free Edition; check FMAPI
+      rate limits tolerate the sweep.</p>
+    </div></div>
+
+    <div class="phase"><div class="num">1</div><div>
+      <h3>Question set + dev golden capture</h3>
+      <p class="meta">deliverable: silver_golden_answers live, judged, in UC</p>
+      <p>Curate the question set (D2), run <code>export_dev_goldens.py</code> — ask, judge, export, land;
+      <code>rag_ingest</code> carries it to silver. Verify: row count, scores present, the SA-interview question
+      shows dev's multi-hop trace.</p>
+    </div></div>
+
+    <div class="phase"><div class="num">2</div><div>
+      <h3>Baseline the Databricks agent (A0)</h3>
+      <p class="meta">deliverable: first comparable scores — the “before” picture</p>
+      <p>Run the set through agentic + single modes, capture answers + retrieved contexts + hop counts from traces,
+      judge via the bridge, log MLflow run + <code>judge_scores</code> rows. Expect: parity on narrow, gap on broad.</p>
+    </div></div>
+
+    <div class="phase"><div class="num">3</div><div>
+      <h3>Native judge layer</h3>
+      <p class="meta">deliverable: mlflow.genai.evaluate() scorers + assessments on traces</p>
+      <p>Custom <code>@scorer</code> set on FMAPI mirroring the rubric + built-in <code>Correctness</code> vs golden;
+      wire into the same harness so every later variant gets both parity and native scores. Dashboard page for
+      <code>judge_scores</code>.</p>
+    </div></div>
+
+    <div class="phase"><div class="num">4</div><div>
+      <h3>Optimisation matrix (A1, A2 — A3 only if the gate fails)</h3>
+      <p class="meta">deliverable: winning config, evidence in MLflow experiment rag-agent-evals</p>
+      <p>Protocol-port prompt, hop budget, model sweep; one judged run per variant; pick the winner per the gate.
+      Unit tests pin the new decide behaviour (scripted LLM, no network — same test pattern as today's 16).</p>
+    </div></div>
+
+    <div class="phase"><div class="num">5</div><div>
+      <h3>Ship + validate</h3>
+      <p class="meta">deliverable: redeployed agent, live judged re-run, PR through no-mistakes</p>
+      <p>Winner into <code>rag_agent.py</code> defaults → re-register → redeploy → judged run against the live endpoint
+      (the demo: the SA-interview question answering with visible multi-hop research). Docs, README, memory update,
+      no-mistakes gate, PR.</p>
+    </div></div>
+  </div>
+</section>
+
+<!-- ======================= RISKS ======================= -->
+<section id="risks">
+  <div class="card">
+    <p class="kicker">risks &amp; boundaries</p>
+    <h2>What can bite, and the planned counter</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>risk</th><th>severity</th><th>counter</th></tr></thead>
+      <tbody>
+        <tr><td>Dev server down or history schema shifts mid-capture</td><td><span class="tag warn">medium</span></td><td>probe first; capture is idempotent per question; venv-subprocess fallback path</td></tr>
+        <tr><td>Judge nondeterminism blurs small deltas</td><td><span class="tag warn">medium</span></td><td>temp-0 judge, fixed rubric version; deltas under ~3% treated as noise; <code>judge_samples</code> spread option exists dev-side</td></tr>
+        <tr><td>FMAPI rate limits during sweeps (Free Edition)</td><td><span class="tag warn">medium</span></td><td>serial per-variant runs, small question set, retry with backoff; sweep is 4 models × ~12 questions, not hundreds</td></tr>
+        <tr><td>Context-format mismatch skews faithfulness between systems</td><td><span class="tag warn">medium</span></td><td>normalise both sides to plain chunk text before judging — judge never sees formatting differences</td></tr>
+        <tr><td>DeepSeek judge cost/latency on the depth rubric</td><td><span class="tag ok">low</span></td><td>~12 questions × a handful of variants; depth-v2 is one judged call per answer dev-side</td></tr>
+        <tr><td>Broad-question latency at 4–6 hops on the served agent</td><td><span class="tag ok">low</span></td><td>expected and demo-worthy; scale-to-zero cold start noted for the demo script</td></tr>
+        <tr><td><code>mlflow.genai.evaluate()</code> built-in judges unavailable on Free Edition</td><td><span class="tag ok">low</span></td><td>custom @scorer on FMAPI is the primary native path; built-ins are a bonus, probed in P0</td></tr>
+      </tbody>
+    </table></div>
+    <p style="font-size:14px;color:var(--muted);margin-top:12px"><b>Out of scope:</b> GraphRAG mode, re-anchoring the retrieval
+    golden set's chunk anchors (separate task), Lakehouse Monitoring for GenAI beta toggle, new serving endpoints
+    (both Free Edition slots stay as they are — everything here uses FMAPI pay-per-token + the existing agent endpoint).</p>
+  </div>
+</section>
+
+<!-- ======================= DECISIONS ======================= -->
+<section id="decisions">
+  <div class="card">
+    <p class="kicker">decisions before build</p>
+    <h2>Three calls to lock</h2>
+
+    <form class="q-form" data-lavish-question="d1-judge-stack"
+      onsubmit="event.preventDefault();var f=event.currentTarget;var c=new FormData(f).get('d1');if(!c)return;window.lavish.queuePrompt('D1 judge stack: '+c,{tag:'choice',text:'D1: '+c,element:f,data:{question:'d1-judge-stack',answer:c}});f.classList.add('is-queued');">
+      <h3>D1 · Judge stack</h3>
+      <p class="why">Parity needs the dev judge; the Databricks-native story needs MLflow scorers. Build one or both?</p>
+      <label><input type="radio" name="d1" value="both — dev RAGAS judge for parity + MLflow genai custom scorers on FMAPI for the native layer (recommended)" checked>
+        <span><b>Both</b> <span class="tag ok">recommended</span> — dev judge makes scores comparable to dev's; native scorers put assessments on traces + dashboard. Phases 2 and 3 respectively.</span></label>
+      <label><input type="radio" name="d1" value="dev RAGAS judge only — skip the MLflow native scorer layer">
+        <span><b>Dev judge only</b> — fastest to the optimisation loop; skips the platform-native showcase (phase 3 dropped).</span></label>
+      <label><input type="radio" name="d1" value="MLflow native scorers only — no dev-judge parity bridge">
+        <span><b>Native only</b> — purely Databricks; but scores aren't comparable with dev's numbers, so “perform like dev” becomes indirect.</span></label>
+      <button type="submit">Queue answer</button><span class="queued">✓ queued</span>
+    </form>
+
+    <form class="q-form" data-lavish-question="d2-question-set"
+      onsubmit="event.preventDefault();var f=event.currentTarget;var c=new FormData(f).get('d2');if(!c)return;window.lavish.queuePrompt('D2 question set: '+c,{tag:'choice',text:'D2: '+c,element:f,data:{question:'d2-question-set',answer:c}});f.classList.add('is-queued');">
+      <h3>D2 · Golden question set</h3>
+      <p class="why">Every question costs ask + judge on both sides, per variant. Size sets sweep cost and signal.</p>
+      <label><input type="radio" name="d2" value="12 curated — 6 broad (incl. the SA-interview guide question) + 6 narrow, drawn from corpus themes (recommended)" checked>
+        <span><b>12 curated, stratified</b> <span class="tag ok">recommended</span> — 6 broad + 6 narrow; enough signal per stratum, cheap enough to judge across ~6 variants.</span></label>
+      <label><input type="radio" name="d2" value="20 — reuse the existing retrieval-golden questions plus the SA-interview question">
+        <span><b>Reuse the 20 retrieval goldens</b> + the SA question — more overlap with the retrieval benchmark, but those skew narrow.</span></label>
+      <label><input type="radio" name="d2" value="6 broad-only smoke set">
+        <span><b>6 broad-only</b> — cheapest loop; loses the narrow-question no-regression control.</span></label>
+      <button type="submit">Queue answer</button><span class="queued">✓ queued</span>
+    </form>
+
+    <form class="q-form" data-lavish-question="d3-opt-scope"
+      onsubmit="event.preventDefault();var f=event.currentTarget;var c=new FormData(f).get('d3');if(!c)return;window.lavish.queuePrompt('D3 optimisation scope: '+c,{tag:'choice',text:'D3: '+c,element:f,data:{question:'d3-opt-scope',answer:c}});f.classList.add('is-queued');">
+      <h3>D3 · Optimisation scope</h3>
+      <p class="why">How far phase 4 goes before we call it.</p>
+      <label><input type="radio" name="d3" value="prompt protocol port + model sweep (A1 + A2); ReAct rewrite (A3) only if the gate fails (recommended)" checked>
+        <span><b>A1 + A2, A3 in reserve</b> <span class="tag ok">recommended</span> — answers the prompt-vs-model question with evidence; keeps the serving image unchanged unless needed.</span></label>
+      <label><input type="radio" name="d3" value="prompt-only (A1) — keep llama-3.3-70b, no model sweep">
+        <span><b>Prompt only</b> — smallest change; leaves the model question unanswered.</span></label>
+      <label><input type="radio" name="d3" value="include the native tool-calling ReAct rewrite (A3) from the start">
+        <span><b>Include A3 up front</b> — closest structural mirror of dev; most work, and A1/A2 may already clear the gate.</span></label>
+      <button type="submit">Queue answer</button><span class="queued">✓ queued</span>
+    </form>
+
+    <form class="q-form" data-lavish-question="notes"
+      onsubmit="event.preventDefault();var f=event.currentTarget;var t=f.querySelector('textarea').value.trim();if(!t)return;window.lavish.queuePrompt('Plan notes: '+t,{tag:'note',text:t,element:f,data:{question:'notes'}});f.classList.add('is-queued');">
+      <h3>Anything else</h3>
+      <p class="why">Questions to add to the golden set, constraints, or changes to the plan.</p>
+      <textarea placeholder="e.g. add a question about system design interviews; cap judge spend; …"></textarea>
+      <button type="submit">Queue note</button><span class="queued">✓ queued</span>
+    </form>
+  </div>
+</section>
+
+<footer>s09 · plan for branch db-rag-evals · sources: transcript-rag-agent src/agents + src/evals + api (read 2026-08-20),
+src/lib/rag_agent.py, live endpoint list, databricks-mlflow-evaluation skill</footer>
+</main>
+
+<script>
+  document.getElementById('themeBtn').addEventListener('click',function(){
+    var root=document.documentElement;
+    var next=root.getAttribute('data-theme')==='dark'?'light':'dark';
+    root.setAttribute('data-theme',next);
+    try{localStorage.setItem('s09-theme',next)}catch(e){}
+  });
+</script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.esm.min.mjs";
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const paint = document.createElement("canvas").getContext("2d");
+  function toRgba(color){paint.clearRect(0,0,1,1);paint.fillStyle="#000";paint.fillStyle=color;paint.fillRect(0,0,1,1);return paint.getImageData(0,0,1,1).data;}
+  function compositeRgba(fg,bg){const fa=fg[3]/255,ba=bg[3]/255,a=fa+ba*(1-fa);if(a===0)return[0,0,0,0];
+    return[(fg[0]*fa+bg[0]*ba*(1-fa))/a,(fg[1]*fa+bg[1]*ba*(1-fa))/a,(fg[2]*fa+bg[2]*ba*(1-fa))/a,a*255];}
+  function pageIsDark(){const root=document.documentElement;
+    const rb=toRgba(getComputedStyle(root).backgroundColor);
+    const bb=document.body?toRgba(getComputedStyle(document.body).backgroundColor):[0,0,0,0];
+    const[r,g,b,a]=compositeRgba(bb,rb);
+    if(a>0){return(0.2126*r+0.7152*g+0.0722*b)/255<0.5;}
+    const cs=getComputedStyle(root).colorScheme;
+    if(cs.includes("dark")&&!cs.includes("light"))return true;
+    if(cs.includes("light")&&!cs.includes("dark"))return false;
+    return darkQuery.matches;}
+  const diagrams=[...document.querySelectorAll(".mermaid")].map((el)=>({el,src:el.textContent}));
+  let applied,rendering=false,queued=false;
+  function queueRender(){queued=true;if(rendering)return;void render();}
+  async function render(){rendering=true;
+    try{while(queued){queued=false;
+      const theme=pageIsDark()?"dark":"default";
+      if(theme===applied)continue;
+      mermaid.initialize({startOnLoad:false,theme,securityLevel:"strict"});
+      for(const{el,src}of diagrams){el.removeAttribute("data-processed");el.textContent=src;}
+      try{await mermaid.run({nodes:diagrams.map((d)=>d.el)});}
+      catch(error){console.error("Mermaid diagram render failed:",error);return;}
+      applied=theme;}}
+    finally{rendering=false;if(queued)queueRender();}}
+  if(document.readyState==="complete")queueRender();
+  else window.addEventListener("load",queueRender,{once:true});
+  const themeObserver=new MutationObserver(queueRender);
+  for(const el of[document.documentElement,document.body]){if(!el)continue;
+    themeObserver.observe(el,{attributes:true,attributeFilter:["data-theme","class","style"]});}
+  document.addEventListener("change",queueRender,true);
+  document.addEventListener("transitionend",({propertyName})=>{if(propertyName==="background-color")queueRender();},true);
+  darkQuery.addEventListener("change",queueRender);
+</script>
+</body>
+</html>
