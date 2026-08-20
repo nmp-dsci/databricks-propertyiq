@@ -42,6 +42,7 @@ ENTITY_KEYS: dict[str, tuple[str, ...]] = {
     "segments": ("video_id", "segment_index"),
     "summaries": ("video_id",),
     "golden_qa": ("case_id",),
+    "golden_answers": ("question_id",),
     "eval_runs": ("run_id",),
     "graph_entities": ("chunk_sha", "name"),
     "graph_relations": ("chunk_sha", "source", "target", "relation_type"),
@@ -293,6 +294,60 @@ def golden_rows(payload: dict[str, Any]) -> pd.DataFrame:
                 "corpus_chunks": _as_int(corpus.get("chunks")),
                 "corpus_verified_at": corpus.get("verified_at"),
                 "anchor_status": "stale_pending_reanchor",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def golden_answer_rows(records: Iterable[dict[str, Any]]) -> pd.DataFrame:
+    """Judged dev-workbench answers -> `golden_answers` (plan s09, phase 1).
+
+    Each record is one question answered by transcript-lab's agentic
+    `rag_agent` and scored by its own judge (via scripts/_judge_bridge.py).
+    These rows are the optimisation target: `composite` is the bar a
+    Databricks variant has to meet, `iterations` the research behaviour it
+    should reproduce on broad questions.
+
+    Lists ride as JSON strings (the `payload_json` convention above): the
+    consumers are the judge harness and a dashboard, neither of which needs
+    them exploded, and a flat schema keeps Auto Loader inference boring.
+    """
+    rows = []
+    for record in records:
+        scores = record.get("scores") or {}
+        rows.append(
+            {
+                "question_id": record.get("question_id"),
+                "category": record.get("category"),
+                "domain": record.get("domain"),
+                "question": record.get("question"),
+                "source_case_id": record.get("source_case_id") or "",
+                "answer_md": record.get("answer") or "",
+                "answer_model": record.get("answer_model") or "",
+                "contexts_json": json.dumps(record.get("contexts") or [], ensure_ascii=False),
+                "references_json": json.dumps(record.get("references") or [], ensure_ascii=False),
+                "chunk_ids_json": json.dumps(record.get("chunk_ids") or [], ensure_ascii=False),
+                "queries_json": json.dumps(record.get("queries") or [], ensure_ascii=False),
+                "iterations": _as_int(record.get("iterations")) or 0,
+                "llm_calls": _as_int(record.get("llm_calls")) or 0,
+                "terminated_reason": record.get("terminated_reason") or "",
+                "faithfulness": _as_float(scores.get("faithfulness")),
+                "answer_relevancy": _as_float(scores.get("answer_relevancy")),
+                "context_precision": _as_float(scores.get("context_precision")),
+                "insight_depth": _as_float(scores.get("insight_depth")),
+                "specificity": _as_float(scores.get("specificity")),
+                "coverage": _as_float(scores.get("coverage")),
+                "evidence_breadth": _as_float(scores.get("evidence_breadth")),
+                "calibration": _as_float(scores.get("calibration")),
+                "ragas_v1_composite": _as_float(record.get("ragas_v1_composite")),
+                "composite": _as_float(record.get("composite")),
+                "cap_applied": bool(record.get("cap_applied")),
+                "grounding_floor_breached": bool(record.get("grounding_floor_breached")),
+                "judge_model": record.get("judge_model") or "",
+                "rubric_version": record.get("rubric_version") or "",
+                "judge_error": record.get("judge_error") or "",
+                "captured_at": record.get("captured_at") or "",
+                "source": "transcript-lab/rag_agent",
             }
         )
     return pd.DataFrame(rows)

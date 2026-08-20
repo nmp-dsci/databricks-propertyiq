@@ -44,6 +44,7 @@ ENTITIES = [
     "segments",
     "summaries",
     "golden_qa",
+    "golden_answers",
     "eval_runs",
     "themes",
     "graph_entities",

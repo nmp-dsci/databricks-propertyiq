@@ -25,6 +25,19 @@ A record that cannot be judged (empty contexts, judge failure) comes back with
 `error` set and whatever scores were salvaged — one bad answer must not sink a
 whole variant's run.
 
+Two cost controls, both deliberate normalisations rather than shortcuts:
+
+``--max-contexts`` (default 16)
+    ragas' context_precision issues ONE judge call PER context, and the
+    agentic answers carry 30-70 accumulated contexts — unbounded, a single
+    record costs five-plus minutes and a variant run costs hours. Every
+    record on every side is judged on its first ``max_contexts`` contexts
+    (the agent-ranked best), so the budget is identical for dev goldens and
+    Databricks variants and composites stay comparable.
+``--workers`` (default 3)
+    Records are independent; each worker builds its own judge pair and they
+    share nothing. Output order still follows input order.
+
 Usage (the drivers do this for you):
     <sibling>/.venv/bin/python scripts/_judge_bridge.py \
         --source <transcript-rag-agent root> --input in.jsonl --output out.jsonl
@@ -36,15 +49,21 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+DEFAULT_MAX_CONTEXTS = 16
+DEFAULT_WORKERS = 3
 
-def _judged_record(ragas_judge, depth_judge, rubric, record: dict) -> dict:
+
+def _judged_record(ragas_judge, depth_judge, rubric, record: dict, max_contexts: int) -> dict:
     """One record through both judges and the depth-v2 composite."""
     question = record["question"]
     answer = record["answer"]
     contexts = [c for c in (record.get("contexts") or []) if c and str(c).strip()]
+    contexts = contexts[:max_contexts]
     out: dict = {"id": record.get("id"), "rubric_version": rubric.version}
     if not answer or not answer.strip():
         out["error"] = "empty answer; not judged"
@@ -93,6 +112,8 @@ def main() -> None:
     parser.add_argument("--source", required=True, help="transcript-rag-agent checkout root")
     parser.add_argument("--input", required=True, help="records JSONL to judge")
     parser.add_argument("--output", required=True, help="scored JSONL to write")
+    parser.add_argument("--max-contexts", type=int, default=DEFAULT_MAX_CONTEXTS)
+    parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
     args = parser.parse_args()
 
     source = Path(args.source).resolve()
@@ -105,26 +126,51 @@ def main() -> None:
     from src.evals.judge import DEPTH_V2, DepthJudge, RagasJudge
 
     settings = load_settings()
-    ragas_judge = RagasJudge.from_settings(settings)
-    depth_judge = DepthJudge.from_settings(settings)
+    local = threading.local()
+
+    def judges() -> tuple:
+        # One judge pair per worker thread: the langchain/ragas objects are
+        # not documented thread-safe, and building them is cheap next to the
+        # judge calls themselves.
+        if not hasattr(local, "pair"):
+            local.pair = (RagasJudge.from_settings(settings), DepthJudge.from_settings(settings))
+        return local.pair
 
     records = [
         json.loads(line)
         for line in Path(args.input).read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    print(f"judging {len(records)} record(s) with {ragas_judge.judge_model}", file=sys.stderr)
+    print(
+        f"judging {len(records)} record(s), {args.workers} worker(s), "
+        f"context budget {args.max_contexts}",
+        file=sys.stderr,
+    )
+
+    done = 0
+    lock = threading.Lock()
+
+    def score_one(record: dict) -> dict:
+        nonlocal done
+        ragas_judge, depth_judge = judges()
+        try:
+            scored = _judged_record(ragas_judge, depth_judge, DEPTH_V2, record, args.max_contexts)
+        except Exception as exc:  # noqa: BLE001 — carry on; one failure is one row
+            scored = {"id": record.get("id"), "error": str(exc)}
+        with lock:
+            done += 1
+            print(
+                f"  [{done}/{len(records)}] {scored.get('id')} -> {scored.get('composite')}",
+                file=sys.stderr,
+            )
+        return scored
+
+    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+        results = list(pool.map(score_one, records))
 
     with Path(args.output).open("w", encoding="utf-8") as handle:
-        for index, record in enumerate(records, start=1):
-            try:
-                scored = _judged_record(ragas_judge, depth_judge, DEPTH_V2, record)
-            except Exception as exc:  # noqa: BLE001 — carry on; one failure is one row
-                scored = {"id": record.get("id"), "error": str(exc)}
+        for scored in results:
             handle.write(json.dumps(scored) + "\n")
-            handle.flush()
-            label = scored.get("composite")
-            print(f"  [{index}/{len(records)}] {scored.get('id')} -> {label}", file=sys.stderr)
 
 
 if __name__ == "__main__":
