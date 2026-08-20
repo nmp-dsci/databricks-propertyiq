@@ -92,6 +92,10 @@ rag-goldens: ## Capture + judge dev agentic answers, land silver_golden_answers
 rag-judge: ## Judge one agent variant against the goldens (VARIANT=A0 etc.)
 	@uv run python scripts/rag_judge_eval.py --variant $(or $(VARIANT),A0) $(JUDGE_ARGS)
 
+.PHONY: agent-eval
+agent-eval: ## LLM-as-judge over the LIVE endpoint, entirely in-workspace
+	@$(DB) bundle run rag_agent_eval -t $(TARGET) $(DB_VARS)
+
 .PHONY: pull-dashboard
 pull-dashboard: ## Pull UI edits back into dashboards/*.lvdash.json before committing
 	@for resource in property_overview agent_benchmark rag_eval; do \
