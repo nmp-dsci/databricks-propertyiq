@@ -210,10 +210,10 @@ verdicts AS (
   FROM latest
 )
 SELECT *,
-  from_json(regexp_extract(g_raw, '\\\\{{.*\\\\}}', 0), 'score DOUBLE, rationale STRING') AS g,
-  from_json(regexp_extract(rc_raw, '\\\\{{.*\\\\}}', 0),
+  from_json(regexp_extract(g_raw, '(?s)\\\\{{.*\\\\}}', 0), 'score DOUBLE, rationale STRING') AS g,
+  from_json(regexp_extract(rc_raw, '(?s)\\\\{{.*\\\\}}', 0),
     'relevance STRUCT<score DOUBLE, rationale STRING>, correctness STRUCT<score DOUBLE, rationale STRING>') AS rc,
-  from_json(regexp_extract(d_raw, '\\\\{{.*\\\\}}', 0),
+  from_json(regexp_extract(d_raw, '(?s)\\\\{{.*\\\\}}', 0),
     'insight_depth STRUCT<score DOUBLE>, specificity STRUCT<score DOUBLE>, coverage STRUCT<score DOUBLE>, evidence_breadth STRUCT<score DOUBLE>, calibration STRUCT<score DOUBLE>') AS d
 FROM verdicts
 """)
