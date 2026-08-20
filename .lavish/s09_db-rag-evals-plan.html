@@ -146,6 +146,39 @@ footer{margin-top:70px;color:var(--faint);font-size:13px;font-family:var(--mono)
   </div>
 </div>
 
+<!-- ======================= OUTCOME ======================= -->
+<section id="outcome">
+  <div class="card" style="border-top:3px solid var(--signal)">
+    <p class="kicker">outcome — build closed 2026-08-20</p>
+    <h2>Shipped: agentic RAG as native tool-calling ReAct on qwen3.5</h2>
+    <p>The matrix ran six judged variants and the verdict was structural: prompts and mechanical
+    protocols each moved hops <em>or</em> quality, never both, and tool-use temperament turned out to be a
+    <b>model property</b> — through the identical function-calling loop, llama-3.3 searched once,
+    gpt-oss twice, and <b>qwen3.5 researched like the dev agent: broad 6–9 hops (mean 7.3 vs dev's 9.0),
+    narrow 3, in 11–36s</b>. That is the deployed default (<code>react</code> ×
+    <code>databricks-qwen35-122b-a10b</code>); protocols v1–v4 and llama remain one env var away.</p>
+    <div class="table-wrap" style="margin-top:12px"><table>
+      <thead><tr><th>variant</th><th>broad hops</th><th>broad comp</th><th>narrow comp</th></tr></thead>
+      <tbody>
+        <tr><td>A0 · v1 seed+decide · llama</td><td>1.00</td><td>0.691</td><td>0.770</td></tr>
+        <tr><td>A1 · v2 research prompt · llama</td><td>2.50</td><td>0.575</td><td>0.687</td></tr>
+        <tr><td>A2 · v2 · gpt-oss</td><td>1.33</td><td>0.723</td><td>0.697</td></tr>
+        <tr><td>A3 · v3 seedless · llama</td><td>2.83</td><td>0.608</td><td>0.614</td></tr>
+        <tr><td>A4 · v4 decompose-fanout · llama</td><td>3.00</td><td>0.524</td><td>0.602</td></tr>
+        <tr><td><b>ship · react tool loop · qwen3.5</b></td><td><b>7.33</b></td><td colspan="2">judged in-workspace by <code>rag_agent_eval</code> (rubric native-v1)</td></tr>
+        <tr><td>dev golden (the target)</td><td>9.00</td><td>0.622</td><td>0.758</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout warn" style="margin-top:14px"><b>The judge finding that reframed the gate:</b>
+    under a context-budgeted judge, wide research <em>lowers</em> composites — the dev goldens' own
+    9-hop answers score 0.622 broad, below the single-hop baseline's 0.691 — so hops and video
+    breadth carry the behaviour verdict, and LLM judges carry answer-vs-evidence quality. Both layers
+    ship: the laptop parity judge (depth-v2, DeepSeek — capture only) and the in-workspace
+    <code>make agent-eval</code> job (ai_query on gpt-oss, rubric native-v1, asserts the deployed
+    agent keeps researching).</div>
+  </div>
+</section>
+
 <!-- ======================= ANSWERS ======================= -->
 <section id="answers">
   <p class="kicker">the three questions, answered up front</p>

@@ -77,6 +77,9 @@ make benchmark                   # run the 3-way QA benchmark (Genie / LangGraph
 make rag-export                  # land transcript-lab's full corpus on the volume (manual, idempotent)
 make register-rag-agent          # log + register rag_transcript_agent to UC and deploy it
 make rag-eval                    # score Chroma vs both Vector Search indexes on the golden set
+make rag-goldens                 # capture + judge dev agentic answers -> silver_golden_answers
+make rag-judge VARIANT=A0        # judge one local agent variant with the dev parity judge
+make agent-eval                  # LLM-as-judge over the LIVE endpoint, entirely in-workspace
 ```
 
 Prefer `make ship` over calling `databricks` directly, so tests always run first.

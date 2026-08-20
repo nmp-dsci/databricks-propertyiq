@@ -464,10 +464,50 @@ and cite, which is worse than a miss because it looks authoritative.
 **`rag_transcript_agent`** (`make register-rag-agent`) serves three of
 transcript·lab's answer paths from one deployment, chosen per call with
 `custom_inputs={"mode": ...}`: `single` (one retrieval), `multi` (decompose →
-retrieve per sub-question → synthesize) and `agentic` (a ReAct loop, the
-default). `custom_outputs` returns the retrieved chunk keys and the decision
-log, which is what lets the eval score *retrieval* rather than only prose.
-Answers cite video title and timestamp. `agents.deploy` gives it a Review App.
+retrieve per sub-question → synthesize) and `agentic` — the default — which is
+a **native tool-calling ReAct loop**: `retrieve_transcript_chunks` is a
+function-calling tool on the FMAPI OpenAI-compatible route, and the model
+loops search → read → search until it answers without a tool call (cap 8,
+with a forced tool-less final turn so the loop always terminates).
+`custom_outputs` returns the retrieved chunk keys and the decision log, which
+is what lets the eval score *retrieval* rather than only prose. Answers cite
+video title and timestamp. `agents.deploy` gives it a Review App.
+
+**Why tool-calling, and why qwen3.5** — the branch's judged experiment
+(`workspace.rag.judge_scores`, MLflow experiment `rag-agent-evals`). The
+original agentic mode seeded 8 chunks then asked the LLM a yes/no "enough to
+answer?" — measured at exactly 1 hop on all 12 eval questions, because with
+eight plausible excerpts attached, "yes" is always defensible. Four prompt-
+and structure-protocol variants (`v2`–`v4`, all still selectable via
+`RAG_PROTOCOL` as the measured record) moved hop counts but each fought its
+model: the research-protocol prompt persuaded llama-3.3 (2.5 broad hops) but
+not gpt-oss (1.3); mechanical decompose-fan-out forced 3.0 but flooded the
+judge. The tool loop makes searching the *path of least resistance* instead
+of an instruction to obey — and the model matters as much as the structure:
+through the identical loop, llama-3.3 made one call, gpt-oss two, and
+**qwen3.5-122b researched like the dev agent it ports: broad questions 6–9
+hops (mean 7.3 vs dev's 9.0), narrow 3, in 11–36s**. So the default is
+`react` × `databricks-qwen35-122b-a10b`, with llama still declared on the
+serving resources so `RAG_LLM_ENDPOINT` can flip back without re-registering.
+
+**LLM-as-judge, two layers** (decision D1). The golden set —
+`silver_golden_answers`, the dev workbench's own agentic answers to 12
+corpus-grounded questions (6 broad / 6 narrow), captured over its API and
+scored by its own RAGAS+depth judge via `scripts/_judge_bridge.py` — is the
+reference. Layer one runs on the laptop by necessity: the parity judge needs
+DeepSeek and `ragas`, which Free Edition serverless can never reach (no
+egress, no runtime pip). Layer two is fully in-workspace: `make agent-eval`
+runs the `rag_agent_eval` job, which asks the **live endpoint** every golden
+question, parses hops from the agent's own decision log, resolves contexts
+from its cited chunk keys (budget 16, same as the parity judge), and judges
+groundedness / relevance / correctness-vs-golden / five depth metrics with
+`ai_query` on gpt-oss — pure SQL, appended to `judge_scores` under rubric
+`native-v1` and asserted against regression (the job fails if broad questions
+average ≤ 1.5 hops). One honest judge finding worth knowing before reading
+the numbers: under a context-budgeted judge, *wide research lowers composite
+scores* — the dev goldens themselves (9-hop answers) score 0.622 broad, below
+the old single-hop agent's 0.691 — so hops and video breadth carry the
+behaviour verdict, and the judge carries answer-vs-evidence quality.
 
 **Real-time tracing on the deployed endpoint** needs two things beyond a
 recent `mlflow`, both easy to miss because they fail silently rather than
