@@ -211,21 +211,33 @@ def build_agent(
     # -- multi -------------------------------------------------------------
 
     def decompose(state: RagState) -> RagState:
-        raw = llm(
-            [
-                {"role": "system", "content": SYSTEM},
-                {
-                    "role": "user",
-                    "content": (
-                        "Break this question into at most "
-                        f"{MAX_SUBQUESTIONS} standalone search queries that together "
-                        "would answer it. Return one query per line, no numbering. "
-                        "If it is already a single simple question, return it unchanged.\n\n"
-                        f"Question: {state['question']}"
-                    ),
-                },
-            ]
-        )
+        if protocol == "v4":
+            # Firmer passthrough than multi's shared wording: measured on the
+            # matrix, llama split every narrow question 3 ways under "if it is
+            # already a single simple question, return it unchanged", which
+            # dragged narrow answers off the A0 baseline the no-regression
+            # check protects. Naming the two cases and demanding the verbatim
+            # copy is what actually holds at temperature 0.
+            instruction = (
+                "Decide whether this question needs multiple searches.\n"
+                f"- If it spans several distinct topics (a guide, a comparison, "
+                f"advice across areas), break it into at most {MAX_SUBQUESTIONS} "
+                "standalone search queries — one per distinct topic, one per "
+                "line, no numbering.\n"
+                "- If it is one factual question about one thing, reply with "
+                "the question COPIED EXACTLY as written, alone on one line. "
+                "Do not rephrase it, do not split it.\n\n"
+                f"Question: {state['question']}"
+            )
+        else:
+            instruction = (
+                "Break this question into at most "
+                f"{MAX_SUBQUESTIONS} standalone search queries that together "
+                "would answer it. Return one query per line, no numbering. "
+                "If it is already a single simple question, return it unchanged.\n\n"
+                f"Question: {state['question']}"
+            )
+        raw = llm([{"role": "system", "content": SYSTEM}, {"role": "user", "content": instruction}])
         queries = [line.strip(" -•\t") for line in raw.splitlines() if line.strip()]
         queries = queries[:MAX_SUBQUESTIONS] or [state["question"]]
         return {"queries": queries, "decision_log": [f"decompose: {len(queries)} sub-question(s)"]}
